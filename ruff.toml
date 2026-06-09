@@ -1,0 +1,56 @@
+# Ruff 代码风格检查配置
+# https://docs.astral.sh/ruff/
+
+# 基本设置
+line-length = 120
+target-version = "py310"
+fix = true
+
+# 排除目录
+exclude = [
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    "venv",
+]
+
+# 代码风格规则
+[lint]
+select = [
+    "E",    # pycodestyle 错误
+    "W",    # pycodestyle 警告
+    "F",    # pyflakes
+    "I",    # isort 导入排序
+    "N",    # pep8-naming 命名规范
+    "UP",   # pyupgrade 代码升级
+    "B",    # flake8-bugbear 常见问题
+    "SIM",  # flake8-simplify 简化建议
+    "RUF",  # ruff 特定规则
+]
+
+ignore = [
+    "E501",   # 行长度限制（由格式化工具处理）
+    "B008",   # 不在参数默认值中执行函数调用
+]
+
+# 导入排序配置
+[lint.isort]
+known-first-party = ["borehole_app"]
+
+# 命名规范配置
+[lint.pep8-naming]
+ignore-names = [
+    "test_*",
+    "*_test",
+]
+
+# 格式化配置
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

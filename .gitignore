@@ -1,0 +1,35 @@
+# Python cache and local runtime files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+.coverage
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Local app and assistant state
+.Data/
+.workbuddy/
+
+# Local borehole project data
+新邵县山口水闸钻孔数据/
+新邵县胜利水闸钻孔数据/
+浏阳河南岸堤防钻孔数据/
+
+# Editor and OS noise
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
