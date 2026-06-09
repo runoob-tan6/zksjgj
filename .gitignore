@@ -25,6 +25,8 @@ dist/
 gcm-diagnose.log
 .gh-auth.*
 .gh-config/
+.gh-auth-device.json
+.gh-token
 
 # Local borehole project data
 新邵县山口水闸钻孔数据/
