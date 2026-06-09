@@ -23,6 +23,7 @@ dist/
 .Data/
 .workbuddy/
 gcm-diagnose.log
+.gh-auth.*
 
 # Local borehole project data
 新邵县山口水闸钻孔数据/
