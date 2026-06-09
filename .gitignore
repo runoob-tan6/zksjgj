@@ -22,6 +22,7 @@ dist/
 # Local app and assistant state
 .Data/
 .workbuddy/
+gcm-diagnose.log
 
 # Local borehole project data
 新邵县山口水闸钻孔数据/
