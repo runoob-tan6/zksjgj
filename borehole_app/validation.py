@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from .models import Borehole, ProjectData, WEATHERING_MAP
+from .models import WEATHERING_MAP, Borehole, ProjectData
 
 
 def _pair_depths(raw_text: str) -> list[str]:

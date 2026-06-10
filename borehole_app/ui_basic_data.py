@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable
 
 from .models import BasicLayer, Borehole
 from .ui_tree_helpers import EditableTreeMixin

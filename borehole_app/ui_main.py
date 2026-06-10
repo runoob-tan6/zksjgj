@@ -1,13 +1,22 @@
 from __future__ import annotations
 
-from pathlib import Path
+import os
 import re
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .models import Borehole, MAIN_FIELD_NAMES, ProjectData
-from .project import borehole_type_from_prefix, copy_borehole, create_empty_project, create_new_borehole, is_borehole_prefix, load_project, next_borehole_prefix
+from .models import MAIN_FIELD_NAMES, Borehole, ProjectData
+from .project import (
+    borehole_type_from_prefix,
+    copy_borehole,
+    create_empty_project,
+    create_new_borehole,
+    is_borehole_prefix,
+    load_project,
+    next_borehole_prefix,
+)
 from .settings import load_last_project, save_last_project
 from .ui_basic_data import BasicDataFrame
 from .ui_main_file import MainFileFrame
@@ -79,13 +88,15 @@ class BoreholeEditorApp(tk.Tk):
         ttk.Label(top, textvariable=self.project_var, style="Hint.TLabel", width=30).pack(side="left", padx=(16, 8))
         self.project_button = ttk.Button(top, text="选择项目", width=7, command=self.choose_project)
         self.project_button.pack(side="right", padx=4)
+        self.open_folder_button = ttk.Button(top, text="打开文件夹", width=8, command=self.open_project_folder)
+        self.open_folder_button.pack(side="right", padx=4)
         self.reload_button = ttk.Button(top, text="重新加载", width=7, command=self.reload_project)
         self.reload_button.pack(side="right", padx=4)
         self.add_button = ttk.Button(top, text="新增钻孔", width=7, command=self.add_borehole)
         self.add_button.pack(side="right", padx=4)
         self.validate_button = ttk.Button(top, text="校验", width=4, command=self.validate_current_project)
         self.validate_button.pack(side="right", padx=4)
-        self.export_button = ttk.Button(top, text="导出地层试验", width=10, command=self.export_layer_tests)
+        self.export_button = ttk.Button(top, text="导出试验", width=7, command=self.export_layer_tests)
         self.export_button.pack(side="right", padx=4)
         self.save_button = ttk.Button(top, text="保存数据", width=7, style="Accent.TButton", command=self.generate_boreholes)
         self.save_button.pack(side="right", padx=4)
@@ -159,6 +170,20 @@ class BoreholeEditorApp(tk.Tk):
         folder = filedialog.askdirectory(title="选择钻孔项目文件夹")
         if folder:
             self.load_project_path(Path(folder))
+
+    def open_project_folder(self) -> None:
+        """打开当前项目对应的文件夹。"""
+        if not self.project.folder:
+            messagebox.showinfo("提示", "当前没有加载项目，无法打开文件夹。")
+            return
+        folder = self.project.folder
+        if not folder.exists():
+            messagebox.showwarning("提示", f"项目文件夹不存在：\n{folder}")
+            return
+        try:
+            os.startfile(folder)
+        except OSError as e:
+            messagebox.showerror("打开失败", f"无法打开文件夹：\n{folder}\n\n错误：{e}")
 
     def reload_project(self) -> None:
         if self.busy:
@@ -369,7 +394,7 @@ class BoreholeEditorApp(tk.Tk):
     def set_busy(self, busy: bool) -> None:
         self.busy = busy
         state = "disabled" if busy else "normal"
-        for button_name in ("project_button", "reload_button", "add_button", "validate_button", "export_button", "save_button"):
+        for button_name in ("project_button", "open_folder_button", "reload_button", "add_button", "validate_button", "export_button", "save_button"):
             button = getattr(self, button_name, None)
             if button:
                 button.configure(state=state)
@@ -512,16 +537,16 @@ class BoreholeEditorApp(tk.Tk):
         if not self.project.folder:
             messagebox.showinfo("提示", "请先选择项目文件夹。")
             return
-        default_name = f"{self.project.folder.name}_地层试验汇总.csv"
+        default_name = f"{self.project.folder.name}_试验汇总.csv"
         path = filedialog.asksaveasfilename(
-            title="导出地层试验汇总",
+            title="导出试验汇总",
             defaultextension=".csv",
             initialfile=default_name,
             filetypes=[("CSV 文件", "*.csv"), ("所有文件", "*.*")],
         )
         if not path:
             return
-        self.status_var.set("正在导出地层试验汇总...")
+        self.status_var.set("正在导出试验汇总...")
         export_path = Path(path)
 
         def worker() -> None:
@@ -530,10 +555,10 @@ class BoreholeEditorApp(tk.Tk):
             except OSError as exc:
                 error_message = str(exc)
                 self.after(0, lambda: messagebox.showerror("导出失败", error_message))
-                self.after(0, lambda: self.status_var.set("导出地层试验汇总失败。"))
+                self.after(0, lambda: self.status_var.set("导出试验汇总失败。"))
                 return
-            self.after(0, lambda: self.status_var.set(f"已导出地层试验汇总：{row_count} 行。"))
-            self.after(0, lambda: messagebox.showinfo("导出完成", f"已导出 {row_count} 行地层试验数据。\n{export_path}"))
+            self.after(0, lambda: self.status_var.set(f"已导出试验汇总：{row_count} 行。"))
+            self.after(0, lambda: messagebox.showinfo("导出完成", f"已导出 {row_count} 行试验数据。\n{export_path}"))
 
         threading.Thread(target=worker, daemon=True).start()
 

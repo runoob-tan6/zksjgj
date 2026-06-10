@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import BasicLayer, Borehole, END_MARK, MainFileData, TestRecord
+from .models import END_MARK, BasicLayer, Borehole, MainFileData, TestRecord
 
 
 def read_text_file(path: Path) -> str:
@@ -187,10 +187,12 @@ def parse_h_file(path: Path) -> dict[str, str]:
         if line.startswith("#"):
             depth = line[1:].strip()
             description = ""
-            if index + 1 < len(lines):
+            if index + 1 < len(lines) and not lines[index + 1].strip().startswith("#"):
                 description = lines[index + 1].strip()
+                index += 2
+            else:
+                index += 1
             result[depth] = description
-            index += 2
         else:
             index += 1
     return result

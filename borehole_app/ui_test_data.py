@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable, Dict
 
-from .models import Borehole, TEST_SUFFIX_NAMES, TestRecord
+from .models import TEST_SUFFIX_NAMES, Borehole, TestRecord
 from .ui_tree_helpers import EditableTreeMixin
 
 COLUMN_TITLES = {
@@ -79,9 +79,7 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
         else:
             direction = int(-1 * (event.delta / 120))
         first, last = self.tree.yview()
-        if direction < 0 and first <= 0:
-            self._scroll_parent(direction)
-        elif direction > 0 and last >= 1:
+        if (direction < 0 and first <= 0) or (direction > 0 and last >= 1):
             self._scroll_parent(direction)
         else:
             self.tree.yview_scroll(direction, "units")
@@ -282,7 +280,7 @@ class TestDataFrame(ttk.Frame):
         self.begin_change = begin_change
         self.end_change = end_change
         self.borehole: Borehole | None = None
-        self.sections: Dict[str, TestSection] = {}
+        self.sections: dict[str, TestSection] = {}
         self._build()
 
     def _build(self) -> None:

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -30,12 +29,12 @@ class ExampleDataClass:
         >>> print(data.summary())
         '测试数据: 3个值'
     """
-    
+
     name: str = ""
-    values: List[float] = field(default_factory=list)
-    metadata: Dict[str, str] = field(default_factory=dict)
+    values: list[float] = field(default_factory=list)
+    metadata: dict[str, str] = field(default_factory=dict)
     is_valid: bool = True
-    
+
     def summary(self) -> str:
         """生成数据摘要信息。
         
@@ -50,8 +49,8 @@ class ExampleDataClass:
             '测试: 2个值'
         """
         return f"{self.name}: {len(self.values)}个值"
-    
-    def validate(self) -> Tuple[bool, List[str]]:
+
+    def validate(self) -> tuple[bool, list[str]]:
         """验证数据有效性。
         
         检查数据是否满足基本的有效性要求，包括：
@@ -73,18 +72,18 @@ class ExampleDataClass:
             >>> print(is_valid)
             True
         """
-        errors: List[str] = []
-        
+        errors: list[str] = []
+
         if not self.name:
             errors.append("名称不能为空")
-        
+
         if not self.values:
             errors.append("值列表不能为空")
-        
+
         for i, value in enumerate(self.values):
             if not isinstance(value, (int, float)):
                 errors.append(f"第{i+1}个值不是数字: {value}")
-        
+
         return len(errors) == 0, errors
 
 
@@ -120,10 +119,10 @@ def parse_example_file(file_path: Path, encoding: str = "utf-8") -> ExampleDataC
     """
     if not file_path.exists():
         raise FileNotFoundError(f"文件不存在: {file_path}")
-    
+
     if not file_path.is_file():
         raise ValueError(f"路径不是文件: {file_path}")
-    
+
     try:
         content = file_path.read_text(encoding=encoding)
     except UnicodeDecodeError:
@@ -136,27 +135,27 @@ def parse_example_file(file_path: Path, encoding: str = "utf-8") -> ExampleDataC
                 continue
         else:
             raise UnicodeDecodeError(f"无法解码文件: {file_path}")
-    
+
     lines = [line.strip() for line in content.splitlines() if line.strip()]
-    
+
     if not lines:
         raise ValueError("文件为空")
-    
+
     # 第一行作为名称
     name = lines[0]
-    
+
     # 后续行解析为数值
-    values: List[float] = []
+    values: list[float] = []
     for i, line in enumerate(lines[1:], start=2):
         if line.startswith("#"):
             continue  # 跳过注释行
-        
+
         try:
             value = float(line)
             values.append(value)
         except ValueError:
             raise ValueError(f"第{i}行不是有效数值: {line}")
-    
+
     return ExampleDataClass(
         name=name,
         values=values,
@@ -165,10 +164,10 @@ def parse_example_file(file_path: Path, encoding: str = "utf-8") -> ExampleDataC
 
 
 def process_batch_data(
-    data_list: List[ExampleDataClass],
+    data_list: list[ExampleDataClass],
     filter_valid: bool = True,
     sort_by_name: bool = False
-) -> List[ExampleDataClass]:
+) -> list[ExampleDataClass]:
     """批量处理数据对象列表。
     
     对数据对象列表进行过滤、排序等批量处理操作。
@@ -198,22 +197,22 @@ def process_batch_data(
     """
     if not isinstance(data_list, list):
         raise TypeError(f"期望列表，得到{type(data_list)}")
-    
+
     for i, item in enumerate(data_list):
         if not isinstance(item, ExampleDataClass):
             raise TypeError(f"第{i+1}个元素不是ExampleDataClass对象")
-    
+
     # 创建副本避免修改原列表
     result = data_list.copy()
-    
+
     # 过滤有效数据
     if filter_valid:
         result = [item for item in result if item.validate()[0]]
-    
+
     # 排序
     if sort_by_name:
         result.sort(key=lambda x: x.name)
-    
+
     return result
 
 
@@ -235,7 +234,7 @@ class DataProcessor:
         >>> print(len(results))
         10
     """
-    
+
     def __init__(self, batch_size: int = 100, enable_cache: bool = True) -> None:
         """初始化数据处理器。
         
@@ -248,13 +247,13 @@ class DataProcessor:
         """
         if batch_size <= 0:
             raise ValueError("batch_size必须大于0")
-        
+
         self.batch_size = batch_size
         self.enable_cache = enable_cache
-        self.cache: Dict[str, ExampleDataClass] = {}
+        self.cache: dict[str, ExampleDataClass] = {}
         self._process_count = 0
-    
-    def process(self, data_list: List[ExampleDataClass]) -> List[ExampleDataClass]:
+
+    def process(self, data_list: list[ExampleDataClass]) -> list[ExampleDataClass]:
         """处理数据列表。
         
         按批次处理数据列表，支持缓存和进度跟踪。
@@ -270,20 +269,20 @@ class DataProcessor:
         """
         if not data_list:
             raise ValueError("数据列表不能为空")
-        
-        results: List[ExampleDataClass] = []
-        
+
+        results: list[ExampleDataClass] = []
+
         # 分批处理
         for i in range(0, len(data_list), self.batch_size):
             batch = data_list[i:i + self.batch_size]
             batch_results = self._process_batch(batch)
             results.extend(batch_results)
-            
+
             self._process_count += len(batch)
-        
+
         return results
-    
-    def _process_batch(self, batch: List[ExampleDataClass]) -> List[ExampleDataClass]:
+
+    def _process_batch(self, batch: list[ExampleDataClass]) -> list[ExampleDataClass]:
         """处理单个批次的数据。
         
         Args:
@@ -292,25 +291,25 @@ class DataProcessor:
         Returns:
             处理后的批次数据列表
         """
-        results: List[ExampleDataClass] = []
-        
+        results: list[ExampleDataClass] = []
+
         for item in batch:
             # 检查缓存
             cache_key = f"{item.name}_{len(item.values)}"
             if self.enable_cache and cache_key in self.cache:
                 results.append(self.cache[cache_key])
                 continue
-            
+
             # 处理数据
             processed = self._process_item(item)
             results.append(processed)
-            
+
             # 更新缓存
             if self.enable_cache:
                 self.cache[cache_key] = processed
-        
+
         return results
-    
+
     def _process_item(self, item: ExampleDataClass) -> ExampleDataClass:
         """处理单个数据项。
         
@@ -324,10 +323,10 @@ class DataProcessor:
         if item.values:
             avg = sum(item.values) / len(item.values)
             item.metadata["average"] = str(round(avg, 2))
-        
+
         return item
-    
-    def get_statistics(self) -> Dict[str, int]:
+
+    def get_statistics(self) -> dict[str, int]:
         """获取处理统计信息。
         
         Returns:

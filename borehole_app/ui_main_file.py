@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Callable, Dict
 
 from .models import EDITABLE_MAIN_INDICES, MAIN_FIELD_NAMES, Borehole
 
@@ -15,9 +15,9 @@ class MainFileFrame(ttk.Frame):
         self.begin_change = begin_change
         self.end_change = end_change
         self.borehole: Borehole | None = None
-        self.vars: Dict[int, tk.StringVar] = {}
-        self.entries: Dict[int, ttk.Entry] = {}
-        self._trace_ids: Dict[int, str] = {}
+        self.vars: dict[int, tk.StringVar] = {}
+        self.entries: dict[int, ttk.Entry] = {}
+        self._trace_ids: dict[int, str] = {}
         self._edit_token = None
         self._edit_index: int | None = None
         self._edit_original_value = ""

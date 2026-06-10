@@ -6,9 +6,9 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
-from tempfile import TemporaryDirectory
+
+import pytest
 
 
 @pytest.fixture
@@ -57,20 +57,20 @@ def sample_project_folder(tmp_path: Path, sample_borehole_data: dict[str, str]) 
     """
     project_folder = tmp_path / "test_project"
     project_folder.mkdir()
-    
+
     # 创建钻孔文件夹
     borehole_folder = project_folder / "ZK1"
     borehole_folder.mkdir()
-    
+
     # 写入数据文件
     for suffix, content in sample_borehole_data.items():
         if suffix == "main":
             file_path = borehole_folder / "ZK1"
         else:
             file_path = borehole_folder / f"ZK1.-{suffix}"
-        
+
         file_path.write_text(content, encoding="utf-8")
-    
+
     return project_folder
 
 
@@ -86,15 +86,15 @@ def gbk_encoded_folder(tmp_path: Path) -> Path:
     """
     folder = tmp_path / "gbk_project"
     folder.mkdir()
-    
+
     # 创建GBK编码的主文件
     main_file = folder / "ZK1"
     main_file.write_text("ZK1\n10\n测试地点\n★\n", encoding="gbk")
-    
+
     # 创建GBK编码的c文件
     c_file = folder / "ZK1.-c"
     c_file.write_text("5,A\n10,B\n★\n", encoding="gbk")
-    
+
     return folder
 
 
@@ -130,14 +130,14 @@ def mock_borehole():
     Returns:
         模拟的Borehole对象
     """
-    from borehole_app.models import Borehole, MainFileData, BasicLayer, TestRecord
-    
+    from borehole_app.models import BasicLayer, Borehole, MainFileData, TestRecord
+
     borehole = Borehole(
         prefix="ZK_TEST",
         folder=Path("/tmp/test"),
         hole_type="ZK"
     )
-    
+
     borehole.main = MainFileData(lines=["ZK_TEST", "10"] + [""] * 14)
     borehole.layers = [
         BasicLayer(bottom_depth="5", lithology_code="A"),
@@ -147,27 +147,27 @@ def mock_borehole():
         TestRecord(values=["1", "5", "S1"]),
         TestRecord(values=["6", "10", "S2"]),
     ]
-    
+
     return borehole
 
 
 class MockTkinterApp:
     """模拟Tkinter应用程序，用于UI测试。"""
-    
+
     def __init__(self):
         self.title = "测试应用"
         self.geometry_val = "800x600"
         self.destroyed = False
-    
+
     def title(self, title: str) -> None:
         self.title = title
-    
+
     def geometry(self, geometry: str) -> None:
         self.geometry_val = geometry
-    
+
     def destroy(self) -> None:
         self.destroyed = True
-    
+
     def mainloop(self) -> None:
         pass
 
@@ -211,7 +211,7 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "slow" in item.nodeid:
             item.add_marker(pytest.mark.slow)
-        
+
         # 为UI测试添加标记
         if "ui" in item.nodeid:
             item.add_marker(pytest.mark.ui)

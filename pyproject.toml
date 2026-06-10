@@ -62,6 +62,9 @@ select = [
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults
+    "RUF001", # CJK punctuation is normal in Chinese projects
+    "RUF002", # CJK punctuation is normal in Chinese projects
+    "RUF003", # CJK punctuation is normal in Chinese projects
 ]
 
 [tool.ruff.lint.isort]
