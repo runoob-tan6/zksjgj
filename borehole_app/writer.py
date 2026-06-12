@@ -19,7 +19,10 @@
 from __future__ import annotations
 
 import csv
+import re
 import shutil
+import xml.etree.ElementTree as ET
+import zipfile
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -47,18 +50,27 @@ LAYER_TEST_VALUE_NAMES: dict[str, str] = {
 """地层试验结果字段名称映射。"""
 
 LAYER_TEST_EXPORT_HEADERS: list[str] = [
-    "钻孔编号",
-    "层序号",
-    "地层时代/成因",
-    "岩性代号",
-    "试验类型",
-    "数量",
-    "试验起始深度",
-    "试验终止深度",
-    "结果值/编号",
-    "结果字段",
+    "\u94bb\u5b54\u7f16\u53f7",
+    "\u5c42\u5e8f\u53f7",
+    "\u5730\u5c42\u65f6\u4ee3/\u6210\u56e0",
+    "\u5ca9\u6027\u4ee3\u53f7",
+    "\u8bd5\u9a8c\u7c7b\u578b",
+    "\u8bd5\u9a8c\u6df1\u5ea6",
+    "\u7ed3\u679c\u503c/\u7f16\u53f7",
+    "\u7ed3\u679c\u5b57\u6bb5",
 ]
-"""地层试验导出CSV表头。"""
+"""??????CSV???"""
+
+LAYER_TEST_SUMMARY_HEADERS: list[str] = [
+    "\u5730\u5c42\u65f6\u4ee3/\u6210\u56e0",
+    "\u5ca9\u6027\u4ee3\u53f7",
+    "\u8bd5\u9a8c\u7c7b\u578b",
+    "\u8bd5\u9a8c\u6570",
+    "\u6700\u5927\u503c",
+    "\u6700\u5c0f\u503c",
+    "\u5e73\u5747\u503c",
+]
+"""???????????"""
 
 
 # ============================================================================
@@ -308,10 +320,28 @@ def generate_borehole(borehole: Borehole, old_prefix: str | None = None) -> list
 
     all_targets = {
         "main": (folder / borehole.prefix, render_main_file(borehole)),
-        "c": (folder / f"{borehole.prefix}.-c", render_pair_file([(layer.bottom_depth, layer.lithology_code) for layer in borehole.layers])),
-        "b": (folder / f"{borehole.prefix}.-b", render_pair_file([(layer.bottom_depth, layer.formation) for layer in borehole.layers], skip_empty_value=True)),
-        "d": (folder / f"{borehole.prefix}.-d", render_pair_file([(layer.bottom_depth, layer.structure) for layer in borehole.layers], skip_empty_value=True)),
-        "g": (folder / f"{borehole.prefix}.-g", render_pair_file([(layer.bottom_depth, layer.weathering) for layer in borehole.layers], skip_empty_value=True)),
+        "c": (
+            folder / f"{borehole.prefix}.-c",
+            render_pair_file([(layer.bottom_depth, layer.lithology_code) for layer in borehole.layers]),
+        ),
+        "b": (
+            folder / f"{borehole.prefix}.-b",
+            render_pair_file(
+                [(layer.bottom_depth, layer.formation) for layer in borehole.layers], skip_empty_value=True
+            ),
+        ),
+        "d": (
+            folder / f"{borehole.prefix}.-d",
+            render_pair_file(
+                [(layer.bottom_depth, layer.structure) for layer in borehole.layers], skip_empty_value=True
+            ),
+        ),
+        "g": (
+            folder / f"{borehole.prefix}.-g",
+            render_pair_file(
+                [(layer.bottom_depth, layer.weathering) for layer in borehole.layers], skip_empty_value=True
+            ),
+        ),
         "h": (folder / f"{borehole.prefix}.-h", render_h_file(borehole)),
     }
 
@@ -400,6 +430,69 @@ def _fmt_test_result(suffix: str, value: str) -> str:
     return f"{number:.2E}"
 
 
+def _xlsx_cell_ref(row_index: int, column_index: int) -> str:
+    """返回 XLSX 单元格坐标。"""
+    letters = ""
+    while column_index:
+        column_index, remainder = divmod(column_index - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return f"{letters}{row_index}"
+
+
+def _xlsx_text_cell(row_index: int, column_index: int, value: object) -> ET.Element:
+    cell = ET.Element("c", {"r": _xlsx_cell_ref(row_index, column_index), "t": "inlineStr"})
+    inline = ET.SubElement(cell, "is")
+    text = ET.SubElement(inline, "t")
+    text.text = str(value)
+    return cell
+
+
+def _xlsx_number_cell(row_index: int, column_index: int, value: float, style_id: int | None = None) -> ET.Element:
+    attributes = {"r": _xlsx_cell_ref(row_index, column_index)}
+    if style_id is not None:
+        attributes["s"] = str(style_id)
+    cell = ET.Element("c", attributes)
+    numeric_value = ET.SubElement(cell, "v")
+    numeric_value.text = f"{value:.15g}"
+    return cell
+
+
+def _xlsx_result_cell(row_index: int, value: object) -> ET.Element:
+    """生成结果值/编号列单元格，注水结果使用科学记数数值格式。"""
+    suffix = getattr(value, "suffix", "")
+    raw_value = getattr(value, "raw_value", value)
+    if suffix == "n":
+        number = _to_float(raw_value)
+        if number is not None:
+            return _xlsx_number_cell(row_index, 7, number, style_id=1)
+    return _xlsx_text_cell(row_index, 7, raw_value)
+
+
+def _xlsx_summary_number_cell(row_index: int, column_index: int, value: SummaryNumberValue) -> ET.Element:
+    style_id = 1 if getattr(value, "test_type", "") == "注水" else None
+    return _xlsx_number_cell(row_index, column_index, float(value.raw_value), style_id=style_id)
+
+
+class ExportResultValue(str):
+    """导出结果值字符串，同时保留试验类型和原始值供 XLSX 写入使用。"""
+
+    def __new__(cls, text: str, suffix: str, raw_value: str):
+        instance = super().__new__(cls, text)
+        instance.suffix = suffix
+        instance.raw_value = raw_value
+        return instance
+
+
+class SummaryNumberValue(str):
+    """统计汇总数值字符串，同时保留原始数值供 XLSX 写入使用。"""
+
+    def __new__(cls, text: str, test_type: str, raw_value: float):
+        instance = super().__new__(cls, text)
+        instance.test_type = test_type
+        instance.raw_value = raw_value
+        return instance
+
+
 def _layer_ranges(borehole: Borehole):
     """生成地层深度范围。
 
@@ -418,10 +511,12 @@ def _layer_ranges(borehole: Borehole):
         top = bottom
 
 
-def _test_matches_layer(suffix: str, test_top: float, test_bottom: float, layer_top: float, layer_bottom: float) -> bool:
+def _test_matches_layer(
+    suffix: str, test_top: float, test_bottom: float, layer_top: float, layer_bottom: float
+) -> bool:
     """判断试验是否属于指定地层。
 
-    压水试验（m）使用区间重叠判断，其他试验使用起始深度判断。
+    所有试验均使用起始深度判断归属地层，避免跨层压水记录重复导出。
 
     Args:
         suffix: 试验类型后缀
@@ -433,12 +528,20 @@ def _test_matches_layer(suffix: str, test_top: float, test_bottom: float, layer_
     Returns:
         是否匹配
     """
-    if suffix == "m":
-        return test_top < layer_bottom and test_bottom > layer_top
     return layer_top <= test_top < layer_bottom
 
 
-def _layer_test_sort_key(suffix: str, borehole: Borehole, record_index: int, layer_index: int, layer) -> tuple:
+def _borehole_sort_key(prefix: str) -> tuple[int, str | int]:
+    """Sort borehole ids by their trailing number when present."""
+    match = re.search(r"(\d+)$", prefix)
+    if match:
+        return (0, int(match.group(1)))
+    return (1, prefix)
+
+
+def _layer_test_sort_key(
+    suffix: str, borehole: Borehole, record_index: int, layer_index: int, layer, formation: str | None = None
+) -> tuple:
     """生成地层试验排序键。
 
     Args:
@@ -452,9 +555,26 @@ def _layer_test_sort_key(suffix: str, borehole: Borehole, record_index: int, lay
         排序键元组
     """
     type_index = list(LAYER_TEST_TYPES).index(suffix)
+    sort_formation = layer.formation if formation is None else formation
+    hole_key = _borehole_sort_key(borehole.prefix)
     if suffix == "m":
-        return (type_index, borehole.prefix, record_index, layer_index, layer.formation, layer.lithology_code)
-    return (type_index, layer.formation, layer.lithology_code, layer_index, borehole.prefix, record_index)
+        return (type_index, hole_key, record_index, layer_index, sort_formation, layer.lithology_code)
+    return (type_index, sort_formation, layer.lithology_code, hole_key, record_index, layer_index)
+
+
+def _effective_layer_formation(borehole: Borehole, layer_index: int, layer) -> str:
+    """Get the formation for grouped .-b data.
+
+    Generated .-b files store repeated formation values only at the deepest
+    layer. Earlier layers in that group are empty in the UI model, so exports
+    need to look ahead to the next non-empty formation.
+    """
+    if layer.formation:
+        return layer.formation
+    for next_layer in borehole.layers[layer_index:]:
+        if next_layer.formation:
+            return next_layer.formation
+    return ""
 
 
 def _layer_test_data_row(
@@ -482,16 +602,16 @@ def _layer_test_data_row(
     Returns:
         数据行列表
     """
+    formatted_result = _fmt_test_result(suffix, result_value)
+    formation = _effective_layer_formation(borehole, layer_index, layer)
     return [
         borehole.prefix,
         layer_index,
-        layer.formation,
+        formation,
         layer.lithology_code,
         test_type,
-        1,
-        _fmt_depth(test_top),
-        _fmt_depth(test_bottom),
-        _fmt_test_result(suffix, result_value),
+        f"{_fmt_depth(test_top)}-{_fmt_depth(test_bottom)}",
+        ExportResultValue(formatted_result, suffix, result_value),
         LAYER_TEST_VALUE_NAMES[suffix],
     ]
 
@@ -523,37 +643,177 @@ def _layer_test_rows(project: ProjectData) -> list[tuple]:
                 for layer_index, layer_top, layer_bottom, layer in ranges:
                     if not _test_matches_layer(suffix, test_top, test_bottom, layer_top, layer_bottom):
                         continue
-                    sort_key = _layer_test_sort_key(suffix, borehole, record_index, layer_index, layer)
-                    data_row = _layer_test_data_row(suffix, borehole, layer_index, layer, test_type, test_top, test_bottom, result_value)
+                    formation = _effective_layer_formation(borehole, layer_index, layer)
+                    sort_key = _layer_test_sort_key(
+                        suffix, borehole, record_index, layer_index, layer, formation=formation
+                    )
+                    data_row = _layer_test_data_row(
+                        suffix, borehole, layer_index, layer, test_type, test_top, test_bottom, result_value
+                    )
                     rows.append((*sort_key, data_row))
                     if suffix != "m":
                         break
     return rows
 
 
-def export_layer_test_summary(project: ProjectData, target_path: Path) -> int:
-    """导出地层试验汇总表。
+def _fmt_summary_number(value: float, test_type: str, *, is_average: bool = False) -> str:
+    if test_type == "注水":
+        return SummaryNumberValue(f"{value:.2E}", test_type, value)
+    if test_type == "标贯" and is_average:
+        return SummaryNumberValue(f"{value:.1f}", test_type, value)
+    return SummaryNumberValue(f"{value:g}", test_type, value)
 
-    生成CSV文件，包含所有钻孔的地层试验数据。
+
+def _layer_test_summary_rows(rows: list[list]) -> list[list]:
+    """Build grouped statistics rows appended after detail export rows."""
+    grouped: dict[tuple[str, str, str], dict[str, object]] = {}
+    for row in rows:
+        formation = str(row[2])
+        lithology_code = str(row[3])
+        test_type = str(row[4])
+        result_value = row[6]
+        key = (formation, lithology_code, test_type)
+        item = grouped.setdefault(key, {"count": 0, "numbers": []})
+        item["count"] = int(item["count"]) + 1
+        if test_type in {"标贯", "注水"}:
+            number = _to_float(str(getattr(result_value, "raw_value", result_value)))
+            if number is not None:
+                item["numbers"].append(number)
+
+    summary_rows: list[list] = []
+    for (formation, lithology_code, test_type), item in sorted(grouped.items()):
+        numbers = item["numbers"]
+        if numbers:
+            maximum = _fmt_summary_number(max(numbers), test_type)
+            minimum = _fmt_summary_number(min(numbers), test_type)
+            average = _fmt_summary_number(sum(numbers) / len(numbers), test_type, is_average=True)
+        else:
+            maximum = minimum = average = ""
+        summary_rows.append([formation, lithology_code, test_type, item["count"], maximum, minimum, average])
+    return summary_rows
+
+
+def export_layer_test_summary(project: ProjectData, target_path: Path) -> int:
+    """??????????
+
+    ?????????? CSV ? XLSX ?????????????????
 
     Args:
-        project: 项目数据对象
-        target_path: 目标文件路径
+        project: ??????
+        target_path: ??????
 
     Returns:
-        导出的数据行数
+        ???????
 
     Example:
         >>> count = export_layer_test_summary(project, Path("export.csv"))
-        >>> print(f"导出了 {count} 行数据")
+        >>> print(f"??? {count} ???")
     """
     rows = _layer_test_rows(project)
     target_path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_rows = [row for *_sort, row in sorted(rows, key=lambda item: item[:-1])]
+    summary_rows = _layer_test_summary_rows(sorted_rows)
+    if target_path.suffix.lower() == ".xlsx":
+        _write_layer_test_xlsx(target_path, sorted_rows, summary_rows)
+        return len(rows)
     with target_path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(LAYER_TEST_EXPORT_HEADERS)
-        writer.writerows(row for *_sort, row in sorted(rows, key=lambda item: item[:-1]))
+        writer.writerows(sorted_rows)
+        if summary_rows:
+            writer.writerow([])
+            writer.writerow(["统计汇总"])
+            writer.writerow(LAYER_TEST_SUMMARY_HEADERS)
+            writer.writerows(summary_rows)
     return len(rows)
+
+
+def _write_layer_test_xlsx(target_path: Path, rows: list[list], summary_rows: list[list]) -> None:
+    """?? XLSX ??????????????????????"""
+    worksheet = _build_layer_test_sheet_xml(rows, summary_rows)
+    with zipfile.ZipFile(target_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _xlsx_content_types_xml())
+        archive.writestr("_rels/.rels", _xlsx_root_rels_xml())
+        archive.writestr("xl/workbook.xml", _xlsx_workbook_xml())
+        archive.writestr("xl/_rels/workbook.xml.rels", _xlsx_workbook_rels_xml())
+        archive.writestr("xl/styles.xml", _xlsx_styles_xml())
+        archive.writestr("xl/worksheets/sheet1.xml", worksheet)
+
+
+def _build_layer_test_sheet_xml(rows: list[list], summary_rows: list[list]) -> bytes:
+    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    ET.register_namespace("", ns)
+    worksheet = ET.Element(f"{{{ns}}}worksheet")
+    sheet_data = ET.SubElement(worksheet, f"{{{ns}}}sheetData")
+    all_rows = [LAYER_TEST_EXPORT_HEADERS, *rows]
+    if summary_rows:
+        all_rows.extend([[], ["统计汇总"], LAYER_TEST_SUMMARY_HEADERS, *summary_rows])
+    for row_index, values in enumerate(all_rows, start=1):
+        row_element = ET.SubElement(sheet_data, f"{{{ns}}}row", {"r": str(row_index)})
+        for column_index, value in enumerate(values, start=1):
+            if 1 < row_index <= len(rows) + 1 and column_index == 7:
+                cell = _xlsx_result_cell(row_index, value)
+            elif isinstance(value, SummaryNumberValue):
+                cell = _xlsx_summary_number_cell(row_index, column_index, value)
+            elif isinstance(value, int | float):
+                cell = _xlsx_number_cell(row_index, column_index, float(value))
+            else:
+                cell = _xlsx_text_cell(row_index, column_index, value)
+            row_element.append(cell)
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True)
+
+
+def _xlsx_content_types_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>"""
+
+
+def _xlsx_root_rels_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def _xlsx_workbook_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="试验汇总" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>"""
+
+
+def _xlsx_workbook_rels_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+
+def _xlsx_styles_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="1">
+    <numFmt numFmtId="164" formatCode="0.00E+00"/>
+  </numFmts>
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
 
 
 def delete_borehole_files(borehole: Borehole) -> list[Path]:

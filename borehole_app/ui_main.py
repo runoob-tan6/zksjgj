@@ -4,6 +4,7 @@ import os
 import re
 import threading
 import tkinter as tk
+from contextlib import suppress
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -64,13 +65,22 @@ class BoreholeEditorApp(tk.Tk):
         style.configure("TFrame", background="#F7F8FC")
         style.configure("Card.TFrame", background="#FFFFFF", relief="flat")
         style.configure("TLabel", background="#F7F8FC", foreground="#20242A")
-        style.configure("Title.TLabel", font=("Microsoft YaHei UI", 15, "bold"), background="#F7F8FC", foreground="#20242A")
+        style.configure(
+            "Title.TLabel", font=("Microsoft YaHei UI", 15, "bold"), background="#F7F8FC", foreground="#20242A"
+        )
         style.configure("Hint.TLabel", foreground="#697386", background="#F7F8FC")
         style.configure("TButton", padding=(12, 7), background="#EEF2FF", foreground="#27315D", borderwidth=0)
         style.map("TButton", background=[("active", "#E0E7FF")])
         style.configure("Accent.TButton", padding=(14, 8), background="#6C63FF", foreground="#FFFFFF", borderwidth=0)
         style.map("Accent.TButton", background=[("active", "#5A52E0")])
-        style.configure("Treeview", background="#FFFFFF", fieldbackground="#FFFFFF", foreground="#20242A", rowheight=30, borderwidth=0)
+        style.configure(
+            "Treeview",
+            background="#FFFFFF",
+            fieldbackground="#FFFFFF",
+            foreground="#20242A",
+            rowheight=30,
+            borderwidth=0,
+        )
         style.configure("Treeview.Heading", background="#F1F4FA", foreground="#3A4252", borderwidth=0, padding=(8, 8))
         style.map("Treeview", background=[("selected", "#E0E7FF")], foreground=[("selected", "#20242A")])
         style.configure("TNotebook", background="#F7F8FC", borderwidth=0)
@@ -98,7 +108,9 @@ class BoreholeEditorApp(tk.Tk):
         self.validate_button.pack(side="right", padx=4)
         self.export_button = ttk.Button(top, text="导出试验", width=7, command=self.export_layer_tests)
         self.export_button.pack(side="right", padx=4)
-        self.save_button = ttk.Button(top, text="保存数据", width=7, style="Accent.TButton", command=self.generate_boreholes)
+        self.save_button = ttk.Button(
+            top, text="保存数据", width=7, style="Accent.TButton", command=self.generate_boreholes
+        )
         self.save_button.pack(side="right", padx=4)
         self.redo_button = ttk.Button(top, text="恢复", width=4, command=self.redo)
         self.redo_button.pack(side="right", padx=4)
@@ -124,9 +136,19 @@ class BoreholeEditorApp(tk.Tk):
         right.pack(side="left", fill="both", expand=True)
         self.notebook = ttk.Notebook(right)
         self.notebook.pack(fill="both", expand=True)
-        self.main_file_frame = MainFileFrame(self.notebook, lambda: self.mark_current_dirty("main"), self.on_hole_id_changed, self.begin_borehole_change, self.end_borehole_change)
-        self.basic_frame = BasicDataFrame(self.notebook, self.mark_current_dirty, self.begin_borehole_change, self.end_borehole_change)
-        self.test_frame = TestDataFrame(self.notebook, self.mark_current_dirty, self.begin_borehole_change, self.end_borehole_change)
+        self.main_file_frame = MainFileFrame(
+            self.notebook,
+            lambda: self.mark_current_dirty("main"),
+            self.on_hole_id_changed,
+            self.begin_borehole_change,
+            self.end_borehole_change,
+        )
+        self.basic_frame = BasicDataFrame(
+            self.notebook, self.mark_current_dirty, self.begin_borehole_change, self.end_borehole_change
+        )
+        self.test_frame = TestDataFrame(
+            self.notebook, self.mark_current_dirty, self.begin_borehole_change, self.end_borehole_change
+        )
         self.raw_frame = RawTextFrame(self.notebook)
         self.validation_frame = ValidationFrame(self.notebook)
         self.notebook.add(self.main_file_frame, text="主文件")
@@ -274,7 +296,10 @@ class BoreholeEditorApp(tk.Tk):
             return
         new_prefix = new_prefix.strip()
         if not is_borehole_prefix(new_prefix):
-            messagebox.showwarning("提示", "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。")
+            messagebox.showwarning(
+                "提示",
+                "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。",
+            )
             return
         if new_prefix in self.project.boreholes:
             messagebox.showwarning("提示", f"钻孔 {new_prefix} 已存在。")
@@ -294,7 +319,9 @@ class BoreholeEditorApp(tk.Tk):
         borehole = self.project.boreholes.get(prefix)
         if not borehole:
             return
-        if not messagebox.askyesno("删除钻孔", f"确定删除钻孔 {prefix}？\n\n点击保存数据后，会备份并删除该钻孔的所有原始文件。"):
+        if not messagebox.askyesno(
+            "删除钻孔", f"确定删除钻孔 {prefix}？\n\n点击保存数据后，会备份并删除该钻孔的所有原始文件。"
+        ):
             return
         self.project.boreholes.pop(prefix, None)
         if not borehole.is_new:
@@ -333,10 +360,8 @@ class BoreholeEditorApp(tk.Tk):
         total_depth = 0.0
         counts = {"o": 0, "q": 0, "n": 0, "m": 0}
         for borehole in self.project.boreholes.values():
-            try:
+            with suppress(ValueError):
                 total_depth += float(borehole.main.depth.strip())
-            except ValueError:
-                pass
             for suffix in counts:
                 records = borehole.tests.get(suffix, [])
                 counts[suffix] += sum(1 for record in records if any(str(value).strip() for value in record.values))
@@ -394,7 +419,15 @@ class BoreholeEditorApp(tk.Tk):
     def set_busy(self, busy: bool) -> None:
         self.busy = busy
         state = "disabled" if busy else "normal"
-        for button_name in ("project_button", "open_folder_button", "reload_button", "add_button", "validate_button", "export_button", "save_button"):
+        for button_name in (
+            "project_button",
+            "open_folder_button",
+            "reload_button",
+            "add_button",
+            "validate_button",
+            "export_button",
+            "save_button",
+        ):
             button = getattr(self, button_name, None)
             if button:
                 button.configure(state=state)
@@ -489,7 +522,10 @@ class BoreholeEditorApp(tk.Tk):
         if old_prefix == new_prefix:
             return
         if not is_borehole_prefix(new_prefix):
-            messagebox.showwarning("提示", "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。")
+            messagebox.showwarning(
+                "提示",
+                "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。",
+            )
             self.main_file_frame.set_hole_id(old_prefix)
             return
         if new_prefix in self.project.boreholes:
@@ -521,7 +557,10 @@ class BoreholeEditorApp(tk.Tk):
             return
         prefix = prefix.strip()
         if not is_borehole_prefix(prefix):
-            messagebox.showwarning("提示", "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。")
+            messagebox.showwarning(
+                "提示",
+                "钻孔编号格式不正确。请输入 ZK、NZK 开头，后接可选字母、数字和连字符，例如 ZK1、ZK2-1、ZKB1、NZK3-1、NZKB1-1。",
+            )
             return
         if prefix in self.project.boreholes:
             messagebox.showwarning("提示", f"钻孔 {prefix} 已存在。")
@@ -537,12 +576,12 @@ class BoreholeEditorApp(tk.Tk):
         if not self.project.folder:
             messagebox.showinfo("提示", "请先选择项目文件夹。")
             return
-        default_name = f"{self.project.folder.name}_试验汇总.csv"
+        default_name = f"{self.project.folder.name}_试验汇总.xlsx"
         path = filedialog.asksaveasfilename(
             title="导出试验汇总",
-            defaultextension=".csv",
+            defaultextension=".xlsx",
             initialfile=default_name,
-            filetypes=[("CSV 文件", "*.csv"), ("所有文件", "*.*")],
+            filetypes=[("Excel 工作簿", "*.xlsx"), ("CSV 文件", "*.csv"), ("所有文件", "*.*")],
         )
         if not path:
             return
@@ -604,7 +643,9 @@ class BoreholeEditorApp(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def finish_generate_boreholes(self, generated: list[Path] | None, selected_prefix: str | None, error_message: str | None) -> None:
+    def finish_generate_boreholes(
+        self, generated: list[Path] | None, selected_prefix: str | None, error_message: str | None
+    ) -> None:
         self.set_busy(False)
         if error_message:
             self.status_var.set("保存失败。")
@@ -625,10 +666,7 @@ class BoreholeEditorApp(tk.Tk):
         return bool(self.project.dirty_boreholes() or self.project.deleted_boreholes)
 
     def confirm_close(self) -> None:
-        if self.has_unsaved_changes():
-            prompt = "存在未保存的数据修改，确定退出？"
-        else:
-            prompt = "确定关闭软件？"
+        prompt = "存在未保存的数据修改，确定退出？" if self.has_unsaved_changes() else "确定关闭软件？"
         if messagebox.askyesno("关闭确认", prompt):
             self.destroy()
 

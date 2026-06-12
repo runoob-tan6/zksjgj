@@ -33,7 +33,10 @@ def test_gbk_backup_and_writeback(folder: Path) -> None:
 def test_new_borehole_skips_empty_test_files(folder: Path) -> None:
     borehole = Borehole(prefix="ZK_TEST", folder=folder, hole_type="ZK", is_new=True, dirty=True)
     borehole.main = MainFileData(lines=["ZK_TEST", "10"] + [""] * 14)
-    borehole.layers = [BasicLayer(bottom_depth="5", lithology_code="A"), BasicLayer(bottom_depth="10", lithology_code="B")]
+    borehole.layers = [
+        BasicLayer(bottom_depth="5", lithology_code="A"),
+        BasicLayer(bottom_depth="10", lithology_code="B"),
+    ]
     borehole.tests["o"] = []
     borehole.tests["q"] = []
     borehole.tests["n"] = [TestRecord(values=["1", "2", "0.000409"])]
@@ -47,7 +50,10 @@ def test_new_borehole_skips_empty_test_files(folder: Path) -> None:
 def test_validation_extra_and_duplicate_depths(folder: Path) -> None:
     borehole = Borehole(prefix="ZK_TEST", folder=folder, hole_type="ZK")
     borehole.main = MainFileData(lines=["ZK_TEST", "10"] + [""] * 14)
-    borehole.layers = [BasicLayer(bottom_depth="5", lithology_code="A"), BasicLayer(bottom_depth="10", lithology_code="B")]
+    borehole.layers = [
+        BasicLayer(bottom_depth="5", lithology_code="A"),
+        BasicLayer(bottom_depth="10", lithology_code="B"),
+    ]
     borehole.raw_texts[".-b"] = "5,X\n7,Y\n★"
     borehole.raw_texts[".-h"] = "#5\ndesc\n#5\ndup\n#8\nextra\n★"
     messages = validate_borehole(borehole)
@@ -69,10 +75,10 @@ def test_layer_test_export_rules(folder: Path) -> None:
     output = folder / "export.csv"
     row_count = export_layer_test_summary(project, output)
     text = output.read_text(encoding="utf-8-sig")
-    assert row_count == 3
+    assert row_count == 2
     assert "4.09E-04" in text
-    assert "ZK1,1,Q^s,QG02,压水,1,4,8,7.5,透水率" in text
-    assert "ZK1,2,D$3s,c321,压水,1,4,8,7.5,透水率" in text
+    assert "ZK1,1,Q^s,QG02,压水,4-8,7.5,透水率" in text
+    assert "ZK1,2,D$3s,c321,压水,4-8,7.5,透水率" not in text
 
 
 def test_depth_key() -> None:

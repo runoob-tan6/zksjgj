@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
-from borehole_app.models import BasicLayer, Borehole, MainFileData, ProjectData, TestRecord
+from borehole_app.models import BasicLayer, Borehole, MainFileData, ProjectData
+from borehole_app.models import TestRecord as ModelTestRecord
 from borehole_app.writer import (
     backup_existing_file,
     build_test_file_lines,
@@ -258,8 +260,8 @@ class TestRenderFunctions:
         """测试生成试验文件行。"""
         borehole = Borehole(prefix="ZK1", folder=Path("/data"), hole_type="ZK")
         borehole.tests["o"] = [
-            TestRecord(values=["1", "5", "S1"]),
-            TestRecord(values=["6", "10", "S2"]),
+            ModelTestRecord(values=["1", "5", "S1"]),
+            ModelTestRecord(values=["6", "10", "S2"]),
         ]
 
         result = build_test_file_lines(borehole, "o")
@@ -272,7 +274,7 @@ class TestRenderFunctions:
         """测试生成试验文件行（包含空值）。"""
         borehole = Borehole(prefix="ZK1", folder=Path("/data"), hole_type="ZK")
         borehole.tests["o"] = [
-            TestRecord(values=["1", "5", "S1", ""]),
+            ModelTestRecord(values=["1", "5", "S1", ""]),
         ]
 
         result = build_test_file_lines(borehole, "o")
@@ -284,7 +286,7 @@ class TestRenderFunctions:
         """测试渲染试验文件。"""
         borehole = Borehole(prefix="ZK1", folder=Path("/data"), hole_type="ZK")
         borehole.tests["o"] = [
-            TestRecord(values=["1", "5", "S1"]),
+            ModelTestRecord(values=["1", "5", "S1"]),
         ]
 
         result = render_test_file(borehole, "o")
@@ -341,7 +343,7 @@ class TestGenerateBorehole:
             BasicLayer(bottom_depth="10", lithology_code="A"),
         ]
         # 添加试验数据
-        borehole.tests["o"] = [TestRecord(values=["1", "5", "S1"])]
+        borehole.tests["o"] = [ModelTestRecord(values=["1", "5", "S1"])]
         borehole.existing_suffixes = {"main", "c", "o"}
 
         # 第一次保存：生成试验文件
@@ -375,7 +377,7 @@ class TestExportLayerTestSummary:
             BasicLayer(bottom_depth="10", lithology_code="B", formation="D"),
         ]
         borehole.tests["o"] = [
-            TestRecord(values=["1", "5", "S1"]),
+            ModelTestRecord(values=["1", "5", "S1"]),
         ]
         project.boreholes["ZK1"] = borehole
 
@@ -388,6 +390,191 @@ class TestExportLayerTestSummary:
         content = output_file.read_text(encoding="utf-8-sig")
         assert "钻孔编号" in content
         assert "ZK1" in content
+
+    def test_export_injection_result_uses_scientific_notation(self, tmp_path: Path) -> None:
+        """测试注水试验导出结果值使用科学记数法。"""
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="ZK1", folder=tmp_path, hole_type="ZK")
+        borehole.main = MainFileData(lines=["ZK1", "10"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="5", lithology_code="A", formation="Q"),
+        ]
+        borehole.tests["n"] = [
+            ModelTestRecord(values=["1", "2", "0.000409"]),
+        ]
+        project.boreholes["ZK1"] = borehole
+
+        output_file = tmp_path / "export.csv"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 1
+        content = output_file.read_text(encoding="utf-8-sig")
+        assert "试验深度" in content
+        assert "试验起始深度" not in content
+        assert "试验终止深度" not in content
+        assert "数量" not in content.splitlines()[0]
+        assert "ZK1,1,Q,A,注水,1-2,4.09E-04,渗透系数" in content
+        assert "统计汇总" in content
+        assert "Q,A,注水,1,4.09E-04,4.09E-04,4.09E-04" in content
+        detail_row = content.splitlines()[1]
+        assert "0.000409" not in detail_row
+
+    def test_export_xlsx_injection_result_cell_uses_scientific_number_format(self, tmp_path: Path) -> None:
+        """测试 XLSX 注水结果值是数值单元格，并使用科学记数格式。"""
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="ZK1", folder=tmp_path, hole_type="ZK")
+        borehole.main = MainFileData(lines=["ZK1", "10"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="5", lithology_code="A", formation="Q"),
+        ]
+        borehole.tests["n"] = [
+            ModelTestRecord(values=["1", "2", "4.09E-04"]),
+        ]
+        project.boreholes["ZK1"] = borehole
+
+        output_file = tmp_path / "export.xlsx"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 1
+        with zipfile.ZipFile(output_file) as workbook:
+            sheet_xml = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
+            styles_xml = workbook.read("xl/styles.xml").decode("utf-8")
+
+        assert 'r="G2" s="1"' in sheet_xml
+        assert "<v>0.000409</v>" in sheet_xml
+        assert 'formatCode="0.00E+00"' in styles_xml
+        assert '<c r="G2" t="inlineStr"><is><t>4.09E-04</t></is></c>' not in sheet_xml
+
+    def test_export_pressure_test_uses_start_depth_layer_only(self, tmp_path: Path) -> None:
+        """测试跨层压水试验只按起始深度所在层导出。"""
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="ZK1", folder=tmp_path, hole_type="ZK")
+        borehole.main = MainFileData(lines=["ZK1", "10"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="5", lithology_code="A", formation="Q"),
+            BasicLayer(bottom_depth="10", lithology_code="B", formation="D"),
+        ]
+        borehole.tests["m"] = [
+            ModelTestRecord(values=["4", "8", "7.5"]),
+        ]
+        project.boreholes["ZK1"] = borehole
+
+        output_file = tmp_path / "export.csv"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 1
+        content = output_file.read_text(encoding="utf-8-sig")
+        assert "ZK1,1,Q,A,压水,4-8,7.5,透水率" in content
+        assert "ZK1,2,D,B,压水,4-8,7.5,透水率" not in content
+
+    def test_export_uses_grouped_formation_for_blank_layer(self, tmp_path: Path) -> None:
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="NZK16", folder=tmp_path, hole_type="NZK")
+        borehole.main = MainFileData(lines=["NZK16", "14.2"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="2", lithology_code="QB05", formation=""),
+            BasicLayer(bottom_depth="4.2", lithology_code="QF09", formation="Q$4^al"),
+            BasicLayer(bottom_depth="6.8", lithology_code="QB05", formation=""),
+            BasicLayer(bottom_depth="9.2", lithology_code="QF09", formation="Q$2^al"),
+            BasicLayer(bottom_depth="14.2", lithology_code="B043", formation="P$tln"),
+        ]
+        borehole.tests["o"] = [
+            ModelTestRecord(values=["0.4", "0.8", "ZK16-1"]),
+        ]
+        project.boreholes["NZK16"] = borehole
+
+        output_file = tmp_path / "export.csv"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 1
+        content = output_file.read_text(encoding="utf-8-sig")
+        assert "NZK16,1,Q$4^al,QB05" in content
+        assert "NZK16,1,,QB05" not in content
+
+    def test_export_sorts_same_group_by_borehole_number(self, tmp_path: Path) -> None:
+        project = ProjectData(folder=tmp_path)
+        for prefix, sample in [("NZK11", "S11"), ("NZK28", "S28"), ("NZK6", "S6")]:
+            borehole = Borehole(prefix=prefix, folder=tmp_path, hole_type="NZK")
+            borehole.main = MainFileData(lines=[prefix, "10"] + [""] * 14)
+            borehole.layers = [
+                BasicLayer(bottom_depth="10", lithology_code="QB05", formation="Q$2^al"),
+            ]
+            borehole.tests["o"] = [
+                ModelTestRecord(values=["1", "2", sample]),
+            ]
+            project.boreholes[prefix] = borehole
+
+        output_file = tmp_path / "export.csv"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 3
+        lines = output_file.read_text(encoding="utf-8-sig").splitlines()
+        detail_lines = []
+        for line in lines[1:]:
+            if not line:
+                break
+            detail_lines.append(line)
+        assert [line.split(",", 1)[0] for line in detail_lines] == ["NZK6", "NZK11", "NZK28"]
+
+    def test_export_appends_grouped_statistics(self, tmp_path: Path) -> None:
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="NZK1", folder=tmp_path, hole_type="NZK")
+        borehole.main = MainFileData(lines=["NZK1", "10"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="10", lithology_code="QB05", formation="Q$2^al"),
+        ]
+        borehole.tests["q"] = [
+            ModelTestRecord(values=["1", "2", "7"]),
+            ModelTestRecord(values=["3", "4", "11"]),
+        ]
+        borehole.tests["n"] = [
+            ModelTestRecord(values=["5", "6", "0.0002"]),
+            ModelTestRecord(values=["7", "8", "0.0004"]),
+        ]
+        borehole.tests["o"] = [
+            ModelTestRecord(values=["8", "9", "S1"]),
+        ]
+        project.boreholes["NZK1"] = borehole
+
+        output_file = tmp_path / "export.csv"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 5
+        content = output_file.read_text(encoding="utf-8-sig")
+        assert "统计汇总" in content
+        assert "地层时代/成因,岩性代号,试验类型,试验数,最大值,最小值,平均值" in content
+        assert "Q$2^al,QB05,取样,1,,," in content
+        assert "Q$2^al,QB05,标贯,2,11,7,9.0" in content
+        assert "Q$2^al,QB05,注水,2,4.00E-04,2.00E-04,3.00E-04" in content
+
+    def test_export_xlsx_injection_summary_uses_scientific_number_format(self, tmp_path: Path) -> None:
+        project = ProjectData(folder=tmp_path)
+        borehole = Borehole(prefix="NZK1", folder=tmp_path, hole_type="NZK")
+        borehole.main = MainFileData(lines=["NZK1", "10"] + [""] * 14)
+        borehole.layers = [
+            BasicLayer(bottom_depth="10", lithology_code="QB05", formation="Q$2^al"),
+        ]
+        borehole.tests["n"] = [
+            ModelTestRecord(values=["5", "6", "0.0002"]),
+            ModelTestRecord(values=["7", "8", "0.0004"]),
+        ]
+        project.boreholes["NZK1"] = borehole
+
+        output_file = tmp_path / "export.xlsx"
+        row_count = export_layer_test_summary(project, output_file)
+
+        assert row_count == 2
+        with zipfile.ZipFile(output_file) as workbook:
+            sheet_xml = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
+            styles_xml = workbook.read("xl/styles.xml").decode("utf-8")
+
+        assert 'r="E7" s="1"' in sheet_xml
+        assert 'r="F7" s="1"' in sheet_xml
+        assert 'r="G7" s="1"' in sheet_xml
+        assert "<v>0.0004</v>" in sheet_xml
+        assert "<v>0.0002</v>" in sheet_xml
+        assert "<v>0.0003</v>" in sheet_xml
+        assert 'formatCode="0.00E+00"' in styles_xml
 
     def test_export_empty_project(self, tmp_path: Path) -> None:
         """测试导出空项目。"""

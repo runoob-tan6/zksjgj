@@ -42,34 +42,6 @@ Documentation = "https://github.com/runoob-tan6/zksjgj#readme"
 Repository = "https://github.com/runoob-tan6/zksjgj"
 Issues = "https://github.com/runoob-tan6/zksjgj/issues"
 
-[tool.ruff]
-line-length = 88
-target-version = "py310"
-fix = true
-
-[tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "UP",   # pyupgrade
-    "B",    # flake8-bugbear
-    "SIM",  # flake8-simplify
-    "RUF",  # ruff-specific rules
-]
-ignore = [
-    "E501",   # line too long (handled by formatter)
-    "B008",   # do not perform function calls in argument defaults
-    "RUF001", # CJK punctuation is normal in Chinese projects
-    "RUF002", # CJK punctuation is normal in Chinese projects
-    "RUF003", # CJK punctuation is normal in Chinese projects
-]
-
-[tool.ruff.lint.isort]
-known-first-party = ["borehole_app"]
-
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
@@ -91,9 +63,6 @@ addopts = [
     "-q",                      # quiet mode
     "--strict-markers",        # treat unregistered markers as errors
     "--tb=short",              # shorter traceback format
-    "--cov=borehole_app",      # coverage for borehole_app
-    "--cov-report=term-missing",  # show missing lines
-    "--cov-report=html:coverage", # generate HTML coverage report
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

@@ -22,7 +22,9 @@ from borehole_app.models import (
     Borehole,
     MainFileData,
     ProjectData,
-    TestRecord,
+)
+from borehole_app.models import (
+    TestRecord as ModelTestRecord,
 )
 
 
@@ -93,12 +95,7 @@ class TestBasicLayer:
     def test_custom_values(self) -> None:
         """测试自定义值。"""
         layer = BasicLayer(
-            bottom_depth="5",
-            lithology_code="A",
-            formation="Q",
-            structure="S",
-            weathering="1",
-            description="花岗岩"
+            bottom_depth="5", lithology_code="A", formation="Q", structure="S", weathering="1", description="花岗岩"
         )
         assert layer.bottom_depth == "5"
         assert layer.lithology_code == "A"
@@ -113,12 +110,12 @@ class TestTestRecord:
 
     def test_default_values(self) -> None:
         """测试默认值。"""
-        record = TestRecord()
+        record = ModelTestRecord()
         assert record.values == []
 
     def test_custom_values(self) -> None:
         """测试自定义值。"""
-        record = TestRecord(values=["1", "5", "0.000409"])
+        record = ModelTestRecord(values=["1", "5", "0.000409"])
         assert record.values == ["1", "5", "0.000409"]
 
 

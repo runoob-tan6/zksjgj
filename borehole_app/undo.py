@@ -54,10 +54,7 @@ def copy_tests(tests: dict[str, list[TestRecord]]) -> dict[str, list[TestRecord]
     Returns:
         试验数据字典的独立副本
     """
-    return {
-        suffix: [TestRecord(values=list(record.values)) for record in records]
-        for suffix, records in tests.items()
-    }
+    return {suffix: [TestRecord(values=list(record.values)) for record in records] for suffix, records in tests.items()}
 
 
 @dataclass

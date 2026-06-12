@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from borehole_app.models import BasicLayer, Borehole, MainFileData, ProjectData, TestRecord
+from borehole_app.models import BasicLayer, Borehole, MainFileData, ProjectData
+from borehole_app.models import TestRecord as ModelTestRecord
 from borehole_app.validation import (
     _duplicate_values,
     _h_depths,
@@ -245,7 +246,7 @@ class TestValidateBorehole:
         """测试NZK钻孔有无效的试验类型。"""
         borehole = Borehole(prefix="NZK1", folder=Path("/data"), hole_type="NZK")
         borehole.main = MainFileData(lines=["NZK1", "10"] + [""] * 14)
-        borehole.tests["e"] = [TestRecord(values=["1", "5", "80"])]
+        borehole.tests["e"] = [ModelTestRecord(values=["1", "5", "80"])]
 
         messages = validate_borehole(borehole)
 

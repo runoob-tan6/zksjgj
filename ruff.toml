@@ -1,57 +1,53 @@
-# Ruff 代码风格检查配置
-# https://docs.astral.sh/ruff/
+# Ruff code quality configuration.
+# Keep Ruff settings here only; project metadata and pytest settings live in pyproject.toml.
 
-# 基本设置
 line-length = 120
 target-version = "py310"
 fix = true
 
-# 排除目录
 exclude = [
-    "__pycache__",
-    "build",
-    "dist",
-    "*.egg-info",
     ".git",
     ".mypy_cache",
+    ".pytest_cache",
     ".ruff_cache",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "*.egg-info",
     "venv",
 ]
 
-# 代码风格规则
 [lint]
 select = [
-    "E",    # pycodestyle 错误
-    "W",    # pycodestyle 警告
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
     "F",    # pyflakes
-    "I",    # isort 导入排序
-    "N",    # pep8-naming 命名规范
-    "UP",   # pyupgrade 代码升级
-    "B",    # flake8-bugbear 常见问题
-    "SIM",  # flake8-simplify 简化建议
-    "RUF",  # ruff 特定规则
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # Ruff-specific rules
 ]
 
 ignore = [
-    "E501",   # 行长度限制（由格式化工具处理）
-    "B008",   # 不在参数默认值中执行函数调用
-    "RUF001", # 中文项目中全角字符属正常用法
-    "RUF002", # 中文项目中全角字符属正常用法
-    "RUF003", # 中文项目中全角字符属正常用法
+    "E501",   # line length is handled by the formatter
+    "B008",   # existing Tkinter callbacks use function calls in defaults
+    "RUF001", # Chinese punctuation is normal in this project
+    "RUF002", # Chinese punctuation is normal in this project
+    "RUF003", # Chinese punctuation is normal in this project
 ]
 
-# 导入排序配置
 [lint.isort]
 known-first-party = ["borehole_app"]
 
-# 命名规范配置
 [lint.pep8-naming]
 ignore-names = [
     "test_*",
     "*_test",
 ]
 
-# 格式化配置
 [format]
 quote-style = "double"
 indent-style = "space"

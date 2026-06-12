@@ -8,7 +8,14 @@ from .models import EDITABLE_MAIN_INDICES, MAIN_FIELD_NAMES, Borehole
 
 
 class MainFileFrame(ttk.Frame):
-    def __init__(self, master, on_change: Callable[[], None], on_hole_id_change: Callable[[str, str], None] | None = None, begin_change: Callable | None = None, end_change: Callable | None = None):
+    def __init__(
+        self,
+        master,
+        on_change: Callable[[], None],
+        on_hole_id_change: Callable[[str, str], None] | None = None,
+        begin_change: Callable | None = None,
+        end_change: Callable | None = None,
+    ):
         super().__init__(master)
         self.on_change = on_change
         self.on_hole_id_change = on_hole_id_change
@@ -64,7 +71,9 @@ class MainFileFrame(ttk.Frame):
             self.commit_active_edit()
         self._edit_index = index
         self._edit_original_value = self.vars[index].get()
-        self._edit_token = self.begin_change(self.borehole, f"修改主文件：{MAIN_FIELD_NAMES[index]}") if self.begin_change else None
+        self._edit_token = (
+            self.begin_change(self.borehole, f"修改主文件：{MAIN_FIELD_NAMES[index]}") if self.begin_change else None
+        )
 
     def commit_active_edit(self, _event=None):
         if self._loading or not self.borehole or self._edit_token is None or self._edit_index is None:

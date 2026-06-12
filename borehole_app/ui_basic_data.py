@@ -11,7 +11,13 @@ COLUMNS = ("index", "depth", "c", "b", "d", "g", "h")
 
 
 class BasicDataFrame(EditableTreeMixin, ttk.Frame):
-    def __init__(self, master, on_change: Callable[[str], None], begin_change: Callable | None = None, end_change: Callable | None = None):
+    def __init__(
+        self,
+        master,
+        on_change: Callable[[str], None],
+        begin_change: Callable | None = None,
+        end_change: Callable | None = None,
+    ):
         super().__init__(master)
         self.on_change = on_change
         self.begin_change = begin_change
@@ -82,7 +88,19 @@ class BasicDataFrame(EditableTreeMixin, ttk.Frame):
         if not self.borehole:
             return
         for idx, layer in enumerate(self.borehole.layers, start=1):
-            self.tree.insert("", "end", values=(idx, layer.bottom_depth, layer.lithology_code, layer.formation, layer.structure, layer.weathering, layer.description))
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    idx,
+                    layer.bottom_depth,
+                    layer.lithology_code,
+                    layer.formation,
+                    layer.structure,
+                    layer.weathering,
+                    layer.description,
+                ),
+            )
 
     def selected_index(self) -> int | None:
         selection = self.tree.selection()
@@ -204,33 +222,28 @@ class BasicDataFrame(EditableTreeMixin, ttk.Frame):
             self._active_commit = None
             row_index = int(values[0]) - 1
             layer = self.borehole.layers[row_index]
+            attribute_by_column = {
+                "depth": "bottom_depth",
+                "c": "lithology_code",
+                "b": "formation",
+                "d": "structure",
+                "g": "weathering",
+                "h": "description",
+            }
             if column == "depth":
                 value = self._extract_bottom_depth(value)
-                current_value = layer.bottom_depth
-                setter = lambda v: setattr(layer, "bottom_depth", v)
-            elif column == "c":
-                current_value = layer.lithology_code
-                setter = lambda v: setattr(layer, "lithology_code", v)
-            elif column == "b":
-                current_value = layer.formation
-                setter = lambda v: setattr(layer, "formation", v)
-            elif column == "d":
-                current_value = layer.structure
-                setter = lambda v: setattr(layer, "structure", v)
-            elif column == "g":
-                current_value = layer.weathering
-                setter = lambda v: setattr(layer, "weathering", v)
-            elif column == "h":
-                current_value = layer.description
-                setter = lambda v: setattr(layer, "description", v)
-            else:
+            attribute = attribute_by_column.get(column)
+            if attribute is None:
                 self.refresh()
                 return
+            current_value = getattr(layer, attribute)
             if current_value == value:
                 self.refresh()
                 return
-            token = self.begin_change(self.borehole, f"修改基础数据第 {row_index + 1} 行") if self.begin_change else None
-            setter(value)
+            token = (
+                self.begin_change(self.borehole, f"修改基础数据第 {row_index + 1} 行") if self.begin_change else None
+            )
+            setattr(layer, attribute, value)
             if column == "depth":
                 self.mark_all_basic_dirty()
             else:
@@ -242,4 +255,3 @@ class BasicDataFrame(EditableTreeMixin, ttk.Frame):
         self._active_commit = commit
         entry.bind("<Return>", commit)
         entry.bind("<FocusOut>", commit)
-

@@ -19,7 +19,15 @@ COLUMN_TITLES = {
 
 
 class TestSection(EditableTreeMixin, ttk.LabelFrame):
-    def __init__(self, master, suffix: str, on_change: Callable[[str], None], begin_change: Callable | None = None, end_change: Callable | None = None, sync_depth: Callable[[str, int, str], None] | None = None):
+    def __init__(
+        self,
+        master,
+        suffix: str,
+        on_change: Callable[[str], None],
+        begin_change: Callable | None = None,
+        end_change: Callable | None = None,
+        sync_depth: Callable[[str, int, str], None] | None = None,
+    ):
         title = f".-{suffix} {TEST_SUFFIX_NAMES[suffix]}"
         super().__init__(master, text=title, padding=10)
         self.suffix = suffix
@@ -39,7 +47,7 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
         tree_wrap.pack(fill="x", expand=False)
         columns = tuple(f"v{index}" for index in range(1, len(COLUMN_TITLES[self.suffix]) + 1))
         self.tree = ttk.Treeview(tree_wrap, columns=columns, show="headings", height=8)
-        for col, text in zip(columns, COLUMN_TITLES[self.suffix]):
+        for col, text in zip(columns, COLUMN_TITLES[self.suffix], strict=True):
             self.tree.heading(col, text=text)
             self.tree.column(col, width=110, anchor="center", stretch=True)
         self.tree.pack(side="left", fill="x", expand=True)
@@ -160,7 +168,9 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
         if not self.borehole or self.context_row_index is None:
             return
         records = self.borehole.tests.setdefault(self.suffix, [])
-        token = self.begin_change(self.borehole, f"在上方添加试验数据 .-{self.suffix} 行") if self.begin_change else None
+        token = (
+            self.begin_change(self.borehole, f"在上方添加试验数据 .-{self.suffix} 行") if self.begin_change else None
+        )
         insert_index = max(0, self.context_row_index) if self.context_row_index >= 0 else len(records)
         records.insert(insert_index, TestRecord(values=self.empty_record_values()))
         self.on_change(self.suffix)
@@ -173,7 +183,9 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
         if not self.borehole or self.context_row_index is None:
             return
         records = self.borehole.tests.setdefault(self.suffix, [])
-        token = self.begin_change(self.borehole, f"在下方添加试验数据 .-{self.suffix} 行") if self.begin_change else None
+        token = (
+            self.begin_change(self.borehole, f"在下方添加试验数据 .-{self.suffix} 行") if self.begin_change else None
+        )
         insert_index = min(self.context_row_index + 1, len(records)) if self.context_row_index >= 0 else len(records)
         records.insert(insert_index, TestRecord(values=self.empty_record_values()))
         self.on_change(self.suffix)
@@ -259,7 +271,11 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
             if record.values[col_index] == value:
                 self.refresh()
                 return
-            token = self.begin_change(self.borehole, f"修改试验数据 .-{self.suffix} 第 {row_index + 1} 行") if self.begin_change else None
+            token = (
+                self.begin_change(self.borehole, f"修改试验数据 .-{self.suffix} 第 {row_index + 1} 行")
+                if self.begin_change
+                else None
+            )
             record.values[col_index] = value
             self.on_change(self.suffix)
             if self.sync_depth and self.suffix in ("e", "f") and col_index == 0:
@@ -274,7 +290,13 @@ class TestSection(EditableTreeMixin, ttk.LabelFrame):
 
 
 class TestDataFrame(ttk.Frame):
-    def __init__(self, master, on_change: Callable[[str], None], begin_change: Callable | None = None, end_change: Callable | None = None):
+    def __init__(
+        self,
+        master,
+        on_change: Callable[[str], None],
+        begin_change: Callable | None = None,
+        end_change: Callable | None = None,
+    ):
         super().__init__(master)
         self.on_change = on_change
         self.begin_change = begin_change
@@ -344,7 +366,9 @@ class TestDataFrame(ttk.Frame):
             for row in range(12):
                 self.grid_area.rowconfigure(row, weight=0, minsize=0)
             self.sections.clear()
-            ttk.Label(self.grid_area, text="暂无钻孔数据。", style="Hint.TLabel").grid(row=0, column=0, sticky="nw", pady=12)
+            ttk.Label(self.grid_area, text="暂无钻孔数据。", style="Hint.TLabel").grid(
+                row=0, column=0, sticky="nw", pady=12
+            )
             return
         suffixes = borehole.available_test_suffixes()
         if list(self.sections) == suffixes:
@@ -362,7 +386,14 @@ class TestDataFrame(ttk.Frame):
         for index, suffix in enumerate(suffixes):
             row = index // 2
             col = index % 2
-            section = TestSection(self.grid_area, suffix, self.handle_section_change, self.begin_change, self.end_change, self.sync_ef_depth)
+            section = TestSection(
+                self.grid_area,
+                suffix,
+                self.handle_section_change,
+                self.begin_change,
+                self.end_change,
+                self.sync_ef_depth,
+            )
             section.grid(row=row, column=col, sticky="new", padx=6, pady=6, ipadx=2, ipady=2)
             section.load_borehole(borehole)
             self.sections[suffix] = section
