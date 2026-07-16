@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
+from math import isfinite
 from pathlib import Path
 
 from ..domain.models import ProjectData
@@ -145,6 +146,8 @@ def _read_layers(ws, row: int, headers: list[dict]) -> list[dict]:
             depth_num = float(depth)
         except ValueError:
             continue
+        if not isfinite(depth_num):
+            raise ValueError(f"层底深度必须是有限数字：{depth}")
         layers.append({
             "depth": depth,
             "depth_num": depth_num,
@@ -316,6 +319,8 @@ def _import_csv_rows(
                 depth_num = float(depth)
             except ValueError:
                 continue
+            if not isfinite(depth_num):
+                raise ValueError(f"层底深度必须是有限数字：{depth}")
             layers.append({
                 "depth": depth,
                 "depth_num": depth_num,

@@ -38,6 +38,17 @@ def normalize_for_compare(text: str | None) -> str | None:
     return text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
 
 
+def _existing_newline(path: Path) -> str:
+    if not path.exists():
+        return "\r\n"
+    raw = path.read_bytes()
+    if b"\r\n" in raw:
+        return "\r\n"
+    if b"\r" in raw:
+        return "\r"
+    return "\n"
+
+
 def backup_existing_file(path: Path, backup_folder: Path | None = None) -> Path | None:
     if not path.exists():
         return None
@@ -55,8 +66,10 @@ def write_with_backup(path: Path, text: str, backup_folder: Path | None = None) 
     current = normalize_for_compare(text)
     if existing == current:
         return False
+    newline = _existing_newline(path)
     backup_existing_file(path, backup_folder)
-    path.write_text(text, encoding=encoding)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    path.write_bytes(normalized.replace("\n", newline).encode(encoding))
     return True
 
 

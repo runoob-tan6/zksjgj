@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from math import isfinite
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -49,9 +50,10 @@ SUMMARY_HEADERS = [
 
 def _to_float(value: str) -> float | None:
     try:
-        return float(str(value).strip())
-    except ValueError:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
         return None
+    return number if isfinite(number) else None
 
 
 def _fmt_depth(value: float, suffix: str = "") -> str:
@@ -199,11 +201,8 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
             if col_idx == 7:
                 result_val = value
                 if isinstance(result_val, str):
-                    try:
-                        num = float(result_val)
-                        cell.value = num
-                    except ValueError:
-                        cell.value = result_val
+                    number = _to_float(result_val)
+                    cell.value = number if number is not None else result_val
                 else:
                     cell.value = result_val
                 if row_data[4] == "注水" and isinstance(cell.value, float):
@@ -277,18 +276,20 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
         start_date = lines[6]
         end_date = lines[11]
 
-        try:
-            depth_val = float(depth_str)
+        depth_number = _to_float(depth_str)
+        if depth_number is not None:
+            depth_val: float | str = depth_number
             total_depth += depth_val
-        except (ValueError, TypeError):
+        else:
             depth_val = depth_str
 
         ws2.cell(row=row_idx, column=1, value=hole_id)
         cell_elev = ws2.cell(row=row_idx, column=2)
-        try:
-            cell_elev.value = float(elevation_str)
+        elevation_number = _to_float(elevation_str)
+        if elevation_number is not None:
+            cell_elev.value = elevation_number
             cell_elev.number_format = "0.00"
-        except (ValueError, TypeError):
+        else:
             cell_elev.value = elevation_str
         cell_depth = ws2.cell(row=row_idx, column=3)
         if isinstance(depth_val, float):
@@ -304,10 +305,11 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
             first = water_records[0]
             if len(first.values) > 0 and first.values[0].strip():
                 cell_wl = ws2.cell(row=row_idx, column=6)
-                try:
-                    cell_wl.value = float(first.values[0])
+                water_number = _to_float(first.values[0])
+                if water_number is not None:
+                    cell_wl.value = water_number
                     cell_wl.number_format = "0.0"
-                except ValueError:
+                else:
                     cell_wl.value = first.values[0]
             if len(first.values) > 1 and first.values[1].strip():
                 ws2.cell(row=row_idx, column=7, value=first.values[1])
@@ -350,14 +352,8 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
         end_depth = values[1].strip()
         raw_n_str = values[2].strip()
 
-        try:
-            rod_length = float(start_depth)
-        except (ValueError, TypeError):
-            rod_length = 0.0
-        try:
-            raw_n = float(raw_n_str)
-        except (ValueError, TypeError):
-            raw_n = 0.0
+        rod_length = _to_float(start_depth) or 0.0
+        raw_n = _to_float(raw_n_str) or 0.0
 
         ws3.cell(row=row_idx, column=1, value=prefix)
         ws3.cell(row=row_idx, column=2, value=start_depth)
@@ -414,15 +410,11 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
     for row_idx, (prefix, borehole, record) in enumerate(spt_records, 2):
         values = record.values
         start_depth_str = values[0].strip() if values else ""
-        try:
-            depth = float(start_depth_str)
-        except (ValueError, TypeError):
-            depth = 0
+        depth = _to_float(start_depth_str) or 0.0
         layer_code = ""
         for layer in borehole.layers:
-            try:
-                ld = float(layer.bottom_depth)
-            except (ValueError, TypeError):
+            ld = _to_float(layer.bottom_depth)
+            if ld is None:
                 continue
             if depth < ld:
                 layer_code = layer.lithology_code
@@ -495,10 +487,9 @@ def _write_csv(path: Path, rows: list[list], project: ProjectData) -> None:
                 for row in rows:
                     if str(row[2]) == formation and str(row[3]) == lithology and str(row[4]) == test_type:
                         count += 1
-                        try:
-                            values.append(float(str(row[6])))
-                        except ValueError:
-                            pass
+                        number = _to_float(str(row[6]))
+                        if number is not None:
+                            values.append(number)
                 if values:
                     writer.writerow([formation, lithology, test_type, count,
                                      min(values), max(values), sum(values) / len(values)])
@@ -515,10 +506,11 @@ def _write_csv(path: Path, rows: list[list], project: ProjectData) -> None:
             depth_str = lines[1]
             start_date = lines[6]
             end_date = lines[11]
-            try:
-                depth_val = float(depth_str)
+            depth_number = _to_float(depth_str)
+            if depth_number is not None:
+                depth_val = depth_number
                 total_depth += depth_val
-            except (ValueError, TypeError):
+            else:
                 depth_val = depth_str
             water_depth = ""
             water_date = ""
