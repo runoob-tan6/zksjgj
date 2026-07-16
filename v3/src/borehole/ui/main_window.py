@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -231,10 +232,7 @@ class MainWindow(QMainWindow):
 
     def _check_unsaved_changes(self) -> bool:
         """检查是否有未保存的修改，提示用户。返回 True 表示可以继续。"""
-        dirty = self._project.dirty_boreholes() or self._project.deleted_boreholes
-        dirty_profiles = [p for p in self._project.profile_files.values() if p.modified]
-        dirty_project = [p for p in self._project.project_files.values() if p.modified]
-        if not dirty and not dirty_profiles and not dirty_project:
+        if not SaveService(self._project).summary().has_changes:
             return True
         reply = QMessageBox.question(
             self, "未保存的修改",
@@ -1131,9 +1129,11 @@ class MainWindow(QMainWindow):
         counts = {"o": 0, "q": 0, "n": 0, "m": 0}
         for borehole in self._project.boreholes.values():
             try:
-                total_depth += float(borehole.main.depth.strip())
+                depth = float(borehole.main.depth.strip())
             except (ValueError, AttributeError):
-                pass
+                continue
+            if isfinite(depth):
+                total_depth += depth
             for suffix in counts:
                 records = borehole.tests.get(suffix, [])
                 counts[suffix] += sum(1 for r in records if any(str(v).strip() for v in r.values))
@@ -1148,10 +1148,7 @@ class MainWindow(QMainWindow):
             self._status_label.setText("后台任务仍在运行，请稍后再关闭。")
             event.ignore()
             return
-        dirty = self._project.dirty_boreholes() or self._project.deleted_boreholes
-        dirty_profiles = [p for p in self._project.profile_files.values() if p.modified]
-        dirty_project = [p for p in self._project.project_files.values() if p.modified]
-        if dirty or dirty_profiles or dirty_project:
+        if SaveService(self._project).summary().has_changes:
             reply = QMessageBox.question(
                 self, "关闭确认", "存在未保存的数据修改，确定退出？"
             )

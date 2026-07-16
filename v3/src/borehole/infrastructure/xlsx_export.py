@@ -108,9 +108,9 @@ def _effective_layer_formation(borehole: Borehole, layer_index: int, layer) -> s
     return ""
 
 
-def _layer_test_rows(project: ProjectData) -> list[list]:
+def _layer_test_rows(boreholes: list[Borehole]) -> list[list]:
     rows = []
-    for borehole in project.sorted_boreholes():
+    for borehole in boreholes:
         ranges = list(_layer_ranges(borehole))
         if not ranges:
             continue
@@ -180,7 +180,7 @@ def _auto_width(ws, max_width: int = 40) -> None:
         ws.column_dimensions[column_letter].width = min(max(max_length + 3, 8), max_width)
 
 
-def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
+def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
     wb = Workbook()
     header_font = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
@@ -268,7 +268,7 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
         cell.alignment = center
 
     total_depth = 0.0
-    for row_idx, borehole in enumerate(project.sorted_boreholes(), 2):
+    for row_idx, borehole in enumerate(boreholes, 2):
         lines = borehole.main.normalized_lines()
         hole_id = lines[0]
         elevation_str = lines[2]
@@ -314,7 +314,7 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
             if len(first.values) > 1 and first.values[1].strip():
                 ws2.cell(row=row_idx, column=7, value=first.values[1])
 
-    total_row = len(project.sorted_boreholes()) + 2
+    total_row = len(boreholes) + 2
     ws2.cell(row=total_row, column=1, value="总深度").font = header_font
     cell_total = ws2.cell(row=total_row, column=3)
     cell_total.value = total_depth
@@ -328,7 +328,7 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
 
     # 收集全部标贯记录
     spt_records: list[tuple[str, Borehole, object]] = []
-    for borehole in project.sorted_boreholes():
+    for borehole in boreholes:
         for record in borehole.tests.get("q", []):
             spt_records.append((borehole.prefix, borehole, record))
 
@@ -469,7 +469,7 @@ def _write_xlsx(path: Path, rows: list[list], project: ProjectData) -> None:
     wb.save(path)
 
 
-def _write_csv(path: Path, rows: list[list], project: ProjectData) -> None:
+def _write_csv(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
     import csv
 
     with path.open("w", encoding="utf-8-sig", newline="") as f:
@@ -499,7 +499,7 @@ def _write_csv(path: Path, rows: list[list], project: ProjectData) -> None:
         writer.writerow(["钻孔汇总"])
         writer.writerow(["钻孔编号", "孔口高程(m)", "深度(m)", "勘探开始日期", "勘探结束日期", "地下水埋深(m)", "水位观测日期"])
         total_depth = 0.0
-        for borehole in project.sorted_boreholes():
+        for borehole in boreholes:
             lines = borehole.main.normalized_lines()
             hole_id = lines[0]
             elevation_str = lines[2]
@@ -527,11 +527,12 @@ def _write_csv(path: Path, rows: list[list], project: ProjectData) -> None:
 
 def export_layer_test_summary(project: ProjectData, target_path: Path) -> int:
     """导出地层试验汇总表，支持 .xlsx 和 .csv。"""
-    rows = _layer_test_rows(project)
+    boreholes = project.sorted_boreholes()
+    rows = _layer_test_rows(boreholes)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     if target_path.suffix.lower() == ".xlsx":
-        _write_xlsx(target_path, rows, project)
+        _write_xlsx(target_path, rows, boreholes)
     else:
-        _write_csv(target_path, rows, project)
+        _write_csv(target_path, rows, boreholes)
     return len(rows)
