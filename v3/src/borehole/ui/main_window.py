@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,6 +39,7 @@ from ..application.project_service import (
     next_profile_name,
 )
 from ..application.save_service import SaveService
+from ..application.task_runner import TaskRunner
 from ..application.undo_manager import BoreholeSnapshot, CompositeUndoAction, UndoAction, UndoManager, copy_layers, copy_tests
 from ..domain.enums import HoleType
 from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData, MAIN_FIELD_NAMES
@@ -48,26 +51,6 @@ from .info_pages import RawTextPage, ValidationPage, EditableTextPage
 from .main_file_page import MainFilePage
 from .spt_analysis_page import SPTAnalysisPage
 from .test_data_page import TestDataPage
-
-
-class _WorkerThread(QThread):
-    """通用后台工作线程。"""
-
-    finished = Signal(object)
-    error = Signal(str)
-
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self._fn = fn
-        self._args = args
-        self._kwargs = kwargs
-
-    def run(self):
-        try:
-            result = self._fn(*self._args, **self._kwargs)
-            self.finished.emit(result)
-        except Exception as e:
-            self.error.emit(str(e))
 
 
 class MainWindow(QMainWindow):
@@ -85,6 +68,9 @@ class MainWindow(QMainWindow):
         self._busy = False
         self._refreshing_list = False
         self._syncing = False
+        self._task_runner = TaskRunner(self)
+        self._task_runner.finished.connect(self._on_task_finished)
+        self._worker = None
 
         self.setAcceptDrops(True)
 
@@ -279,13 +265,8 @@ class MainWindow(QMainWindow):
             return
         if not self._check_unsaved_changes():
             return
-        self._set_busy(True)
         self._status_label.setText(f"正在加载：{folder.name}...")
-
-        self._worker = _WorkerThread(load_project, folder)
-        self._worker.finished.connect(lambda p: self._finish_load(folder, p))
-        self._worker.error.connect(lambda e: self._on_load_error(e))
-        self._worker.start()
+        self._start_task(lambda: load_project(folder), lambda project: self._finish_load(folder, project), self._on_load_error)
 
     def _on_load_error(self, error: str) -> None:
         self._set_busy(False)
@@ -1041,13 +1022,8 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._set_busy(True)
         self._status_label.setText("正在保存...")
-
-        self._worker = _WorkerThread(lambda: service.save().as_tuple())
-        self._worker.finished.connect(self._finish_save)
-        self._worker.error.connect(lambda e: self._on_save_error(e))
-        self._worker.start()
+        self._start_task(lambda: service.save().as_tuple(), self._finish_save, self._on_save_error)
 
     def _finish_save(self, result: tuple[list[Path], int]) -> None:
         generated, profile_count = result
@@ -1093,6 +1069,8 @@ class MainWindow(QMainWindow):
         self._validation_page.load_borehole(self._current_borehole)
 
     def _export_layer_tests(self) -> None:
+        if self._busy:
+            return
         if not self._project.folder:
             QMessageBox.information(self, "提示", "请先选择项目文件夹。")
             return
@@ -1104,10 +1082,11 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self._status_label.setText("正在导出...")
-        self._worker = _WorkerThread(export_layer_test_summary, self._project, Path(path))
-        self._worker.finished.connect(lambda count: self._finish_export(count, path))
-        self._worker.error.connect(lambda e: QMessageBox.critical(self, "导出失败", e))
-        self._worker.start()
+        self._start_task(
+            lambda: export_layer_test_summary(self._project, Path(path)),
+            lambda count: self._finish_export(count, path),
+            lambda error: QMessageBox.critical(self, "导出失败", error),
+        )
 
     def _finish_export(self, count: int, path: str) -> None:
         self._status_label.setText(f"已导出 {count} 行。")
@@ -1119,6 +1098,26 @@ class MainWindow(QMainWindow):
             os.startfile(path)
 
     # ── 辅助 ────────────────────────────────────────────────────────
+
+    def _start_task(
+        self,
+        operation: Callable[[], Any],
+        on_success: Callable[[Any], None],
+        on_error: Callable[[str], None],
+    ) -> bool:
+        if self._busy or self._task_runner.running:
+            return False
+        self._set_busy(True)
+        started = self._task_runner.start(operation, on_success, on_error)
+        if not started:
+            self._set_busy(False)
+            return False
+        self._worker = self._task_runner.worker
+        return True
+
+    def _on_task_finished(self) -> None:
+        self._worker = None
+        self._set_busy(False)
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
@@ -1145,6 +1144,10 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:
+        if self._task_runner.running and not self._task_runner.wait():
+            self._status_label.setText("后台任务仍在运行，请稍后再关闭。")
+            event.ignore()
+            return
         dirty = self._project.dirty_boreholes() or self._project.deleted_boreholes
         dirty_profiles = [p for p in self._project.profile_files.values() if p.modified]
         dirty_project = [p for p in self._project.project_files.values() if p.modified]
@@ -1187,16 +1190,12 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         project_folder = Path(folder)
-        self._set_busy(True)
         self._status_label.setText(f"正在从 {file_path.name} 导入...")
 
         def worker():
             return import_from_table(file_path, project_folder)
 
-        self._worker = _WorkerThread(worker)
-        self._worker.finished.connect(lambda p: self._finish_load(project_folder, p))
-        self._worker.error.connect(lambda e: self._on_import_error(e))
-        self._worker.start()
+        self._start_task(worker, lambda project: self._finish_load(project_folder, project), self._on_import_error)
 
     def _on_import_error(self, error: str) -> None:
         self._set_busy(False)
