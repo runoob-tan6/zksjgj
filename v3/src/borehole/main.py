@@ -17,7 +17,7 @@ def _get_icon_path() -> Path | None:
         bundled = base / "assets" / "app_icon.ico"
         if bundled.exists():
             return bundled
-        internal = Path(sys._MEIPASS) / "assets" / "app_icon.ico"
+        internal = Path(getattr(sys, "_MEIPASS")) / "assets" / "app_icon.ico"
         if internal.exists():
             return internal
         return None

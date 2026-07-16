@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Callable
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
+from PySide6.QtCore import QPoint, Qt, QThread
+from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMenu,
-    QMenuBar,
     QMessageBox,
     QSplitter,
     QStatusBar,
@@ -41,17 +39,28 @@ from ..application.project_service import (
 )
 from ..application.save_service import SaveService
 from ..application.task_runner import TaskRunner
-from ..application.undo_manager import BoreholeSnapshot, CompositeUndoAction, UndoAction, UndoManager, copy_layers, copy_tests
+from ..application.undo_manager import (
+    BoreholeSnapshot,
+    CompositeUndoAction,
+    UndoAction,
+    UndoManager,
+)
 from ..domain.enums import HoleType
-from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData, MAIN_FIELD_NAMES
+from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData
 from ..domain.validators import validate_project
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
 from ..infrastructure.xlsx_export import export_layer_test_summary
-from .info_pages import RawTextPage, ValidationPage, EditableTextPage
+from .info_pages import EditableTextPage, RawTextPage, ValidationPage
 from .main_file_page import MainFilePage
 from .spt_analysis_page import SPTAnalysisPage
 from .test_data_page import TestDataPage
+
+
+class _ChangeToken(TypedDict):
+    borehole: Borehole
+    label: str
+    before: BoreholeSnapshot
 
 
 class MainWindow(QMainWindow):
@@ -71,7 +80,7 @@ class MainWindow(QMainWindow):
         self._syncing = False
         self._task_runner = TaskRunner(self)
         self._task_runner.finished.connect(self._on_task_finished)
-        self._worker = None
+        self._worker: QThread | None = None
 
         self.setAcceptDrops(True)
 
@@ -162,9 +171,9 @@ class MainWindow(QMainWindow):
         self._raw_text_page = RawTextPage()
         self._validation_page = ValidationPage()
         self._extra_text_page = EditableTextPage()
-        self._current_extra_borehole = None
-        self._current_extra_profile = None
-        self._current_extra_suffix = None
+        self._current_extra_borehole: Borehole | None = None
+        self._current_extra_profile: ProfileFile | None = None
+        self._current_extra_suffix: str | None = None
 
         self._tabs.addTab(self._main_file_page, "基本信息")
         self._tabs.addTab(self._test_data_page, "试验数据")
@@ -264,7 +273,11 @@ class MainWindow(QMainWindow):
         if not self._check_unsaved_changes():
             return
         self._status_label.setText(f"正在加载：{folder.name}...")
-        self._start_task(lambda: load_project(folder), lambda project: self._finish_load(folder, project), self._on_load_error)
+        self._start_task(
+            lambda: load_project(folder),
+            lambda project: self._finish_load(folder, project),
+            self._on_load_error,
+        )
 
     def _on_load_error(self, error: str) -> None:
         self._set_busy(False)
@@ -370,8 +383,12 @@ class MainWindow(QMainWindow):
     def _select_in_tree(self, prefix: str) -> None:
         for i in range(self._tree.topLevelItemCount()):
             parent = self._tree.topLevelItem(i)
+            if parent is None:
+                continue
             for j in range(parent.childCount()):
                 child = parent.child(j)
+                if child is None:
+                    continue
                 if child.data(0, Qt.ItemDataRole.UserRole) == prefix:
                     self._tree.setCurrentItem(child)
                     self._tree.scrollToItem(child)
@@ -379,17 +396,22 @@ class MainWindow(QMainWindow):
                 # 搜索子节点
                 for k in range(child.childCount()):
                     sub = child.child(k)
+                    if sub is None:
+                        continue
                     if sub.data(0, Qt.ItemDataRole.UserRole) == prefix:
                         self._tree.setCurrentItem(sub)
                         self._tree.scrollToItem(sub)
                         return
 
-    def _on_borehole_selected(self, current: QTreeWidgetItem, _previous) -> None:
+    def _on_borehole_selected(
+        self, current: QTreeWidgetItem | None, _previous: QTreeWidgetItem | None
+    ) -> None:
         if not current or self._refreshing_list:
             return
-        prefix = current.data(0, Qt.ItemDataRole.UserRole)
-        if not prefix:
+        raw_prefix = current.data(0, Qt.ItemDataRole.UserRole)
+        if not raw_prefix:
             return
+        prefix = str(raw_prefix)
         # 剖面文件主文件（可编辑）
         if prefix.startswith("profile:") and not prefix.startswith("profile_extra:"):
             name = prefix[8:]
@@ -468,7 +490,7 @@ class MainWindow(QMainWindow):
         self._main_file_page._commit_field_edit()
         self._test_data_page.commit_active_edit()
 
-    def _show_context_menu(self, pos) -> None:
+    def _show_context_menu(self, pos: QPoint) -> None:
         item = self._tree.itemAt(pos)
         if not item:
             return
@@ -598,7 +620,9 @@ class MainWindow(QMainWindow):
         default_name = next_profile_name(self._project, name[0])
         from PySide6.QtWidgets import QInputDialog
 
-        new_name, ok = QInputDialog.getText(self, "复制剖面文件", "请输入新文件名（格式如 H3 或 Z1）：", text=default_name)
+        new_name, ok = QInputDialog.getText(
+            self, "复制剖面文件", "请输入新文件名（格式如 H3 或 Z1）：", text=default_name
+        )
         if not ok or not new_name.strip():
             return
         new_name = new_name.strip()
@@ -629,7 +653,9 @@ class MainWindow(QMainWindow):
         default_name = next_profile_name(self._project)
         from PySide6.QtWidgets import QInputDialog
 
-        new_name, ok = QInputDialog.getText(self, "新增剖面文件", "请输入文件名（格式如 H3 或 Z1）：", text=default_name)
+        new_name, ok = QInputDialog.getText(
+            self, "新增剖面文件", "请输入文件名（格式如 H3 或 Z1）：", text=default_name
+        )
         if not ok or not new_name.strip():
             return
         new_name = new_name.strip()
@@ -911,12 +937,12 @@ class MainWindow(QMainWindow):
 
     # ── 撤销/重做 ──────────────────────────────────────────────────
 
-    def _begin_borehole_change(self, borehole: Borehole | None, label: str):
+    def _begin_borehole_change(self, borehole: Borehole | None, label: str) -> _ChangeToken | None:
         if not borehole:
             return None
         return {"borehole": borehole, "label": label, "before": BoreholeSnapshot.capture(borehole)}
 
-    def _end_borehole_change(self, token) -> None:
+    def _end_borehole_change(self, token: _ChangeToken | None) -> None:
         if not token:
             return
         borehole = token["borehole"]
@@ -1049,7 +1075,11 @@ class MainWindow(QMainWindow):
         self._update_undo_controls()
         total = len(generated) + profile_count
         self._status_label.setText(f"已保存，更新 {total} 个文件（钻孔 {len(generated)}，剖面 {profile_count}）。")
-        QMessageBox.information(self, "保存完成", f"实际更新 {total} 个文件。\n\n钻孔文件：{len(generated)} 个\n剖面文件：{profile_count} 个")
+        QMessageBox.information(
+            self,
+            "保存完成",
+            f"实际更新 {total} 个文件。\n\n钻孔文件：{len(generated)} 个\n剖面文件：{profile_count} 个",
+        )
 
     def _on_save_error(self, error: str) -> None:
         self._set_busy(False)
@@ -1083,8 +1113,11 @@ class MainWindow(QMainWindow):
         self._start_task(
             lambda: export_layer_test_summary(self._project, Path(path)),
             lambda count: self._finish_export(count, path),
-            lambda error: QMessageBox.critical(self, "导出失败", error),
+            self._on_export_error,
         )
+
+    def _on_export_error(self, error: str) -> None:
+        QMessageBox.critical(self, "导出失败", error)
 
     def _finish_export(self, count: int, path: str) -> None:
         self._status_label.setText(f"已导出 {count} 行。")
@@ -1143,7 +1176,7 @@ class MainWindow(QMainWindow):
             f"注水：{counts['n']} | 压水：{counts['m']}"
         )
 
-    def closeEvent(self, event) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         if self._task_runner.running and not self._task_runner.wait():
             self._status_label.setText("后台任务仍在运行，请稍后再关闭。")
             event.ignore()
@@ -1189,7 +1222,7 @@ class MainWindow(QMainWindow):
         project_folder = Path(folder)
         self._status_label.setText(f"正在从 {file_path.name} 导入...")
 
-        def worker():
+        def worker() -> ProjectData:
             return import_from_table(file_path, project_folder)
 
         self._start_task(worker, lambda project: self._finish_load(project_folder, project), self._on_import_error)

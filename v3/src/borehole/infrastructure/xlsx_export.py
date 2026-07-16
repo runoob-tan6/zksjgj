@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from math import isfinite
 from pathlib import Path
+from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
-from openpyxl.utils import get_column_letter
 
-from ..domain.models import Borehole, ProjectData
+from ..domain.models import BasicLayer, Borehole, ProjectData, TestRecord
 
 LAYER_TEST_TYPES: dict[str, str] = {
     "o": "取样",
@@ -83,7 +84,7 @@ def _borehole_sort_key(prefix: str) -> tuple[int, str | int]:
     return (1, prefix)
 
 
-def _layer_ranges(borehole: Borehole):
+def _layer_ranges(borehole: Borehole) -> Iterator[tuple[int, float, float, BasicLayer]]:
     top = 0.0
     for index, layer in enumerate(borehole.layers, start=1):
         bottom = _to_float(layer.bottom_depth)
@@ -99,7 +100,7 @@ def _test_matches_layer(
     return layer_top <= test_top < layer_bottom
 
 
-def _effective_layer_formation(borehole: Borehole, layer_index: int, layer) -> str:
+def _effective_layer_formation(borehole: Borehole, layer_index: int, layer: BasicLayer) -> str:
     if layer.formation:
         return layer.formation
     for next_layer in borehole.layers[layer_index:]:
@@ -108,8 +109,8 @@ def _effective_layer_formation(borehole: Borehole, layer_index: int, layer) -> s
     return ""
 
 
-def _layer_test_rows(boreholes: list[Borehole]) -> list[list]:
-    rows = []
+def _layer_test_rows(boreholes: list[Borehole]) -> list[list[Any]]:
+    rows: list[list[Any]] = []
     for borehole in boreholes:
         ranges = list(_layer_ranges(borehole))
         if not ranges:
@@ -168,7 +169,7 @@ def _alpha_formula(rod_length_cell: str) -> str:
     )
 
 
-def _auto_width(ws, max_width: int = 40) -> None:
+def _auto_width(ws: Any, max_width: int = 40) -> None:
     """自动调整列宽，跳过公式单元格。"""
     for column in ws.columns:
         max_length = 0
@@ -180,13 +181,15 @@ def _auto_width(ws, max_width: int = 40) -> None:
         ws.column_dimensions[column_letter].width = min(max(max_length + 3, 8), max_width)
 
 
-def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
+def _write_xlsx(path: Path, rows: list[list[Any]], boreholes: list[Borehole]) -> None:
     wb = Workbook()
     header_font = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
 
     # ── Sheet 1: 试验汇总 ──
     ws = wb.active
+    if ws is None:
+        raise RuntimeError("无法创建试验汇总工作表。")
     ws.title = "试验汇总"
 
     for col_idx, header in enumerate(EXPORT_HEADERS, 1):
@@ -197,20 +200,20 @@ def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None
     data_end_row = len(rows) + 1
     for row_idx, row_data in enumerate(rows, 2):
         for col_idx, value in enumerate(row_data, 1):
-            cell = ws.cell(row=row_idx, column=col_idx)
+            data_cell = ws.cell(row=row_idx, column=col_idx)
             if col_idx == 7:
                 result_val = value
                 if isinstance(result_val, str):
                     number = _to_float(result_val)
-                    cell.value = number if number is not None else result_val
+                    data_cell.value = number if number is not None else result_val
                 else:
-                    cell.value = result_val
-                if row_data[4] == "注水" and isinstance(cell.value, float):
-                    cell.number_format = "0.00E+00"
+                    data_cell.value = result_val
+                if row_data[4] == "注水" and isinstance(data_cell.value, float):
+                    data_cell.number_format = "0.00E+00"
             elif isinstance(value, (int, float)):
-                cell.value = value
+                data_cell.value = value
             else:
-                cell.value = value
+                data_cell.value = value
 
     # ── 统计汇总（使用 Excel 公式）──
     groups = _get_unique_groups(rows)
@@ -261,7 +264,15 @@ def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None
 
     # ── Sheet 2: 钻孔汇总 ──
     ws2 = wb.create_sheet("钻孔汇总")
-    borehole_headers = ["钻孔编号", "孔口高程(m)", "深度(m)", "勘探开始日期", "勘探结束日期", "地下水埋深(m)", "水位观测日期"]
+    borehole_headers = [
+        "钻孔编号",
+        "孔口高程(m)",
+        "深度(m)",
+        "勘探开始日期",
+        "勘探结束日期",
+        "地下水埋深(m)",
+        "水位观测日期",
+    ]
     for col_idx, header in enumerate(borehole_headers, 1):
         cell = ws2.cell(row=1, column=col_idx, value=header)
         cell.font = header_font
@@ -279,7 +290,7 @@ def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None
         depth_number = _to_float(depth_str)
         if depth_number is not None:
             depth_val: float | str = depth_number
-            total_depth += depth_val
+            total_depth += depth_number
         else:
             depth_val = depth_str
 
@@ -327,7 +338,7 @@ def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None
     ws3 = wb.create_sheet("标贯分析")
 
     # 收集全部标贯记录
-    spt_records: list[tuple[str, Borehole, object]] = []
+    spt_records: list[tuple[str, Borehole, TestRecord]] = []
     for borehole in boreholes:
         for record in borehole.tests.get("q", []):
             spt_records.append((borehole.prefix, borehole, record))
@@ -469,7 +480,7 @@ def _write_xlsx(path: Path, rows: list[list], boreholes: list[Borehole]) -> None
     wb.save(path)
 
 
-def _write_csv(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
+def _write_csv(path: Path, rows: list[list[Any]], boreholes: list[Borehole]) -> None:
     import csv
 
     with path.open("w", encoding="utf-8-sig", newline="") as f:
@@ -497,7 +508,9 @@ def _write_csv(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
                     writer.writerow([formation, lithology, test_type, count, "", "", ""])
         writer.writerow([])
         writer.writerow(["钻孔汇总"])
-        writer.writerow(["钻孔编号", "孔口高程(m)", "深度(m)", "勘探开始日期", "勘探结束日期", "地下水埋深(m)", "水位观测日期"])
+        writer.writerow(
+            ["钻孔编号", "孔口高程(m)", "深度(m)", "勘探开始日期", "勘探结束日期", "地下水埋深(m)", "水位观测日期"]
+        )
         total_depth = 0.0
         for borehole in boreholes:
             lines = borehole.main.normalized_lines()
@@ -508,8 +521,8 @@ def _write_csv(path: Path, rows: list[list], boreholes: list[Borehole]) -> None:
             end_date = lines[11]
             depth_number = _to_float(depth_str)
             if depth_number is not None:
-                depth_val = depth_number
-                total_depth += depth_val
+                depth_val: float | str = depth_number
+                total_depth += depth_number
             else:
                 depth_val = depth_str
             water_depth = ""

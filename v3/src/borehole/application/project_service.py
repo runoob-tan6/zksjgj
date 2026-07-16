@@ -73,10 +73,10 @@ def load_project(folder: Path) -> ProjectData:
             profile_groups.setdefault(name, {})["main"] = path
             continue
 
-        prefix, suffix = split_borehole_file(path)
-        if not prefix or not suffix:
+        borehole_prefix, borehole_suffix = split_borehole_file(path)
+        if not borehole_prefix or not borehole_suffix:
             continue
-        groups.setdefault(prefix, {})[suffix] = path
+        groups.setdefault(borehole_prefix, {})[borehole_suffix] = path
 
     # 加载项目级文件
     from ..domain.models import ProfileFile

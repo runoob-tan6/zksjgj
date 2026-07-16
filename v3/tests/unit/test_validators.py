@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from borehole.domain.enums import HoleType
-from borehole.domain.models import BasicLayer, Borehole, MainFileData, TestRecord
+from borehole.domain.models import BasicLayer, Borehole, MainFileData
+from borehole.domain.models import TestRecord as Record
 from borehole.domain.validators import validate_borehole
 
 
@@ -73,6 +74,6 @@ class TestValidateBorehole:
 
     def test_nzk_forbidden_tests(self):
         b = _make_borehole(hole_type=HoleType.NZK)
-        b.tests["e"] = [TestRecord(values=["5", "80"])]
+        b.tests["e"] = [Record(values=["5", "80"])]
         msgs = validate_borehole(b)
         assert any("NZK" in m and "e" in m for m in msgs)

@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from borehole.domain.enums import HoleType, Weathering, WEATHERING_LABELS
+from borehole.domain.enums import WEATHERING_LABELS, HoleType, Weathering
 from borehole.domain.models import (
     BasicLayer,
     Borehole,
     MainFileData,
     ProjectData,
-    TestRecord,
 )
 
 

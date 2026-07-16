@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..domain.enums import KNOWN_SUFFIXES, HoleType
+from ..domain.enums import HoleType
 from ..domain.models import (
     END_MARK,
     BasicLayer,
     Borehole,
     MainFileData,
-    ProjectData,
     TestRecord,
 )
 

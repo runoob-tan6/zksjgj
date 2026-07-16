@@ -3,7 +3,8 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from borehole.domain.enums import HoleType
-from borehole.domain.models import BasicLayer, Borehole, MainFileData, ProjectData, TestRecord as Record
+from borehole.domain.models import BasicLayer, Borehole, MainFileData, ProjectData
+from borehole.domain.models import TestRecord as Record
 from borehole.infrastructure.xlsx_export import export_layer_test_summary
 
 

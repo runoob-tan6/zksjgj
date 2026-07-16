@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from ..domain.models import ProjectData
 from ..infrastructure.spt_analysis import (
+    CorrectedSPT,
     compute_layer_stats,
     correct_spt_records,
 )
@@ -91,7 +92,7 @@ class SPTAnalysisPage(QWidget):
             return
 
         # 修正明细：全部钻孔的标贯记录
-        all_rows: list[tuple[str, object]] = []
+        all_rows: list[tuple[str, CorrectedSPT]] = []
         for borehole in project.sorted_boreholes():
             corrected = correct_spt_records(borehole)
             for rec in corrected:

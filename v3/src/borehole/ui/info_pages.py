@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
 
@@ -72,11 +74,11 @@ class EditableTextPage(QWidget):
         self._text = QTextEdit()
         layout.addWidget(self._text)
         self._name = ""
-        self._on_save = None
+        self._on_save: Callable[[str, str], None] | None = None
         self._loading = False
         self._text.textChanged.connect(self._on_text_changed)
 
-    def set_content(self, name: str, content: str, on_save=None) -> None:
+    def set_content(self, name: str, content: str, on_save: Callable[[str, str], None] | None = None) -> None:
         self._loading = True
         self._name = name
         self._on_save = on_save

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -81,9 +81,7 @@ class MainFilePage(QWidget):
         layout.addSpacing(12)
         layout.addWidget(self._basic_data_page, 1)
 
-    def eventFilter(self, obj, event) -> bool:
-        from PySide6.QtCore import QEvent
-
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if isinstance(obj, QLineEdit) and event.type() == QEvent.Type.FocusIn:
             for idx, entry in self._entries.items():
                 if entry is obj:

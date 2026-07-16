@@ -15,9 +15,10 @@ import re
 from datetime import date, timedelta
 from math import isfinite
 from pathlib import Path
+from typing import Any
 
-from ..domain.models import ProjectData
 from ..application.project_service import load_project
+from ..domain.models import ProjectData
 
 WATER = "水位"
 TIME = "时间"
@@ -29,7 +30,7 @@ DEFAULT_START_DATE = "2026.5.10"
 DEFAULT_HOLES_PER_DAY = 2
 
 
-def _fmt(value) -> str:
+def _fmt(value: Any) -> str:
     if value is None or value == "":
         return ""
     if isinstance(value, float):
@@ -106,7 +107,7 @@ def _render_main_file(
     ])
 
 
-def _try_openpyxl(path: Path):
+def _try_openpyxl(path: Path) -> Any:
     try:
         from openpyxl import load_workbook
         return load_workbook(path, data_only=True)
@@ -114,7 +115,7 @@ def _try_openpyxl(path: Path):
         return None
 
 
-def _discover_layer_headers(ws) -> list[dict]:
+def _discover_layer_headers(ws: Any) -> list[dict[str, Any]]:
     headers: list[dict] = []
     for col in range(4, ws.max_column + 1):
         structure = _fmt(ws.cell(1, col).value)
@@ -136,7 +137,7 @@ def _discover_layer_headers(ws) -> list[dict]:
     return headers
 
 
-def _read_layers(ws, row: int, headers: list[dict]) -> list[dict]:
+def _read_layers(ws: Any, row: int, headers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     layers: list[dict] = []
     for header in headers:
         depth = _fmt(ws.cell(row, header["col"]).value)
@@ -157,7 +158,7 @@ def _read_layers(ws, row: int, headers: list[dict]) -> list[dict]:
             "weathering": header["weathering"],
             "name": header["name"],
         })
-    layers.sort(key=lambda l: l["depth_num"])
+    layers.sort(key=lambda layer: layer["depth_num"])
     return layers
 
 
@@ -226,7 +227,7 @@ def import_from_table(
                     designer=designer,
                 ),
                 f"{hole_id}.-b": _pair_text(_compressed_pairs(layers, "formation")),
-                f"{hole_id}.-c": _pair_text([(l["depth"], l["code"]) for l in layers]),
+                f"{hole_id}.-c": _pair_text([(layer["depth"], layer["code"]) for layer in layers]),
                 f"{hole_id}.-d": _pair_text(_compressed_pairs(layers, "structure")),
                 f"{hole_id}.-g": _pair_text(_compressed_pairs(layers, "weathering")),
                 f"{hole_id}.-h": _h_text(layers),
@@ -330,7 +331,7 @@ def _import_csv_rows(
                 "weathering": header["weathering"],
                 "name": header["name"],
             })
-        layers.sort(key=lambda l: l["depth_num"])
+        layers.sort(key=lambda layer: layer["depth_num"])
         if not layers:
             continue
 
@@ -350,7 +351,7 @@ def _import_csv_rows(
                 designer=designer,
             ),
             f"{hole_id}.-b": _pair_text(_compressed_pairs(layers, "formation")),
-            f"{hole_id}.-c": _pair_text([(l["depth"], l["code"]) for l in layers]),
+            f"{hole_id}.-c": _pair_text([(layer["depth"], layer["code"]) for layer in layers]),
             f"{hole_id}.-d": _pair_text(_compressed_pairs(layers, "structure")),
             f"{hole_id}.-g": _pair_text(_compressed_pairs(layers, "weathering")),
             f"{hole_id}.-h": _h_text(layers),

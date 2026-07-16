@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.models import END_MARK, BasicLayer, Borehole, ProjectData
+from ..domain.models import END_MARK, Borehole, ProjectData
 
 
 def make_file_text(lines: Iterable[str]) -> str:

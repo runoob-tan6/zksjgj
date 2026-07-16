@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import borehole.ui.main_window as main_window_module
 from borehole.application.project_service import create_empty_project
+from borehole.application.save_service import SaveService
 from borehole.ui.main_window import MainWindow
 
 
@@ -28,4 +29,5 @@ def test_sync_save_delegates_to_save_service(qtbot, monkeypatch) -> None:
     assert window._save_data_sync()
     assert calls == ["save"]
 
+    monkeypatch.setattr(main_window_module, "SaveService", SaveService)
     window.close()

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from ..domain.models import Borehole
+
+from ..domain.models import Borehole, ProjectData
 
 
 def correction_coefficient(rod_length: float) -> float | None:
@@ -113,7 +114,7 @@ def _find_layer_for_depth(borehole: Borehole, depth: float) -> tuple[int, str]:
     return 0, ""
 
 
-def compute_layer_stats(project) -> list[LayerStats]:
+def compute_layer_stats(project: ProjectData) -> list[LayerStats]:
     """按地层分组计算全项目标贯统计参数。"""
     groups: dict[str, list[float]] = {}
 

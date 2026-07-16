@@ -5,7 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import (
+    QAbstractItemModel,
+    QAbstractTableModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
+    Qt,
+    Signal,
+)
 from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
@@ -15,13 +23,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
-from ..domain.models import Borehole, TestRecord
 from ..domain.enums import SUFFIX_NAMES
+from ..domain.models import Borehole, TestRecord
 from .format_utils import format_numeric_value
 
 COLUMN_TITLES: dict[str, list[str]] = {
@@ -42,12 +51,16 @@ class _TrackingDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self._active_editor: QWidget | None = None
 
-    def createEditor(self, parent: QWidget, option, index: QModelIndex) -> QWidget:
+    def createEditor(
+        self, parent: QWidget, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
+    ) -> QWidget:
         editor = super().createEditor(parent, option, index)
         self._active_editor = editor
         return editor
 
-    def setModelData(self, editor: QWidget, model: QAbstractTableModel, index: QModelIndex) -> None:
+    def setModelData(
+        self, editor: QWidget, model: QAbstractItemModel, index: QModelIndex | QPersistentModelIndex
+    ) -> None:
         super().setModelData(editor, model, index)
         if self._active_editor is editor:
             self._active_editor = None
@@ -55,7 +68,9 @@ class _TrackingDelegate(QStyledItemDelegate):
     def commit_active_edit(self, view: QTableView) -> None:
         editor = self._active_editor
         if editor:
-            self.setModelData(editor, view.model(), view.currentIndex())
+            model = view.model()
+            if model is not None:
+                self.setModelData(editor, model, view.currentIndex())
             view.closePersistentEditor(view.currentIndex())
             self._active_editor = None
 
@@ -82,10 +97,10 @@ class TestRecordModel(QAbstractTableModel):
         self.endResetModel()
         self._loading = False
 
-    def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, _parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return len(self._records)
 
-    def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, _parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return len(self._titles)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
@@ -101,7 +116,7 @@ class TestRecordModel(QAbstractTableModel):
                 return Qt.AlignmentFlag.AlignCenter
         return None
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
         if role == Qt.ItemDataRole.TextAlignmentRole:
@@ -114,7 +129,7 @@ class TestRecordModel(QAbstractTableModel):
             return record.values[col]
         return ""
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
     def _is_numeric_column(self, col: int) -> bool:
@@ -123,7 +138,9 @@ class TestRecordModel(QAbstractTableModel):
             return False
         return any(k in title for k in ("深度", "水位", "值", "率"))
 
-    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+    def setData(
+        self, index: QModelIndex | QPersistentModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole
+    ) -> bool:
         if role != Qt.ItemDataRole.EditRole:
             return False
         record = self._records[index.row()]
@@ -336,13 +353,17 @@ class TestSection(QGroupBox):
         if not indexes or not self._borehole:
             return
         row = indexes[0].row()
-        token = self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行") if self._begin_change else None
+        token = (
+            self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行")
+            if self._begin_change
+            else None
+        )
         self._model.remove_record(row)
         self.data_changed.emit(self._suffix)
         if self._end_change:
             self._end_change(token)
 
-    def _show_context_menu(self, pos) -> None:
+    def _show_context_menu(self, pos: QPoint) -> None:
         index = self._table.indexAt(pos)
         menu = QMenu(self)
         if index.isValid():
@@ -358,7 +379,11 @@ class TestSection(QGroupBox):
     def _insert_and_select(self, row: int) -> None:
         if not self._borehole:
             return
-        token = self._begin_change(self._borehole, f"在上方添加试验数据 .-{self._suffix} 行") if self._begin_change else None
+        token = (
+            self._begin_change(self._borehole, f"在上方添加试验数据 .-{self._suffix} 行")
+            if self._begin_change
+            else None
+        )
         inserted = self._model.insert_at(row)
         self._auto_fill_sample_id(inserted)
         self.data_changed.emit(self._suffix)
@@ -369,7 +394,11 @@ class TestSection(QGroupBox):
     def _delete_row(self, row: int) -> None:
         if not self._borehole:
             return
-        token = self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行") if self._begin_change else None
+        token = (
+            self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行")
+            if self._begin_change
+            else None
+        )
         self._model.remove_record(row)
         self.data_changed.emit(self._suffix)
         if self._end_change:

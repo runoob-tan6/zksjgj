@@ -3,7 +3,6 @@ from pathlib import Path
 
 from borehole.ui.main_window import MainWindow
 
-
 EXPECTED_MODULES = {
     "__init__.py",
     "application/__init__.py",

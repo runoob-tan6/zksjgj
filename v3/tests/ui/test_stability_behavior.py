@@ -1,8 +1,8 @@
 from pathlib import Path
 
-import borehole.ui.main_window as main_window_module
 from PySide6.QtWidgets import QMessageBox
 
+import borehole.ui.main_window as main_window_module
 from borehole.domain.enums import HoleType
 from borehole.domain.models import Borehole, MainFileData, ProfileFile, ProjectData
 from borehole.ui.main_window import MainWindow

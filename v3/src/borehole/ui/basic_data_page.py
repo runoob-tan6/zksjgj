@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPoint, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -41,10 +41,10 @@ class BasicLayerModel(QAbstractTableModel):
         self.endResetModel()
         self._loading = False
 
-    def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, _parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return len(self._layers)
 
-    def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, _parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return len(COLUMNS)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
@@ -60,7 +60,7 @@ class BasicLayerModel(QAbstractTableModel):
                 return Qt.AlignmentFlag.AlignCenter
         return None
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
         if role == Qt.ItemDataRole.TextAlignmentRole:
@@ -74,12 +74,14 @@ class BasicLayerModel(QAbstractTableModel):
         attr = ATTR_MAP[col]
         return getattr(layer, attr, "")
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
         if index.column() == 0:
             return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
-    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+    def setData(
+        self, index: QModelIndex | QPersistentModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole
+    ) -> bool:
         if role != Qt.ItemDataRole.EditRole or not index.isValid():
             return False
         layer = self._layers[index.row()]
@@ -223,7 +225,7 @@ class BasicDataPage(QWidget):
         for suffix in ("c", "b", "d", "g", "h"):
             self.layer_changed.emit(suffix)
 
-    def _show_context_menu(self, pos) -> None:
+    def _show_context_menu(self, pos: QPoint) -> None:
         index = self._table.indexAt(pos)
         menu = QMenu(self)
         if index.isValid():
