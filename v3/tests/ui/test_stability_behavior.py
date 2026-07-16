@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMessageBox
 import borehole.ui.main_window as main_window_module
 from borehole.domain.enums import HoleType
 from borehole.domain.models import Borehole, MainFileData, ProfileFile, ProjectData
+from borehole.domain.models import TestRecord as Record
 from borehole.ui.main_window import MainWindow
 
 
@@ -18,12 +19,17 @@ def _window(qtbot, monkeypatch) -> MainWindow:
 def test_summary_ignores_non_finite_depths(qtbot, monkeypatch, tmp_path: Path) -> None:
     window = _window(qtbot, monkeypatch)
     finite = Borehole("ZK1", tmp_path, HoleType.ZK, main=MainFileData(["ZK1", "10"]))
-    invalid = Borehole("ZK2", tmp_path, HoleType.ZK, main=MainFileData(["ZK2", "nan"]))
-    window._project = ProjectData(folder=tmp_path, boreholes={"ZK1": finite, "ZK2": invalid})
+    non_finite = Borehole("ZK2", tmp_path, HoleType.ZK, main=MainFileData(["ZK2", "nan"]))
+    invalid = Borehole("ZK3", tmp_path, HoleType.ZK, main=MainFileData(["ZK3", "bad"]))
+    invalid.tests["o"] = [Record(["1", "2", "YP1"])]
+    window._project = ProjectData(
+        folder=tmp_path, boreholes={"ZK1": finite, "ZK2": non_finite, "ZK3": invalid}
+    )
 
     window._update_summary()
 
     assert window._summary_label.text().startswith("总深度：10 m")
+    assert "取样：1" in window._summary_label.text()
     window.close()
 
 

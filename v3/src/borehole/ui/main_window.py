@@ -1161,11 +1161,12 @@ class MainWindow(QMainWindow):
         total_depth = 0.0
         counts = {"o": 0, "q": 0, "n": 0, "m": 0}
         for borehole in self._project.boreholes.values():
+            depth: float | None = None
             try:
                 depth = float(borehole.main.depth.strip())
             except (ValueError, AttributeError):
-                continue
-            if isfinite(depth):
+                pass
+            if depth is not None and isfinite(depth):
                 total_depth += depth
             for suffix in counts:
                 records = borehole.tests.get(suffix, [])
