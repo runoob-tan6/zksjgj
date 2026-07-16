@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="36" y1="20" x2="222" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#164e63"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="116" y1="36" x2="140" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#bg)"/>
+  <path d="M40 160h176v40c0 13.3-10.7 24-24 24H64c-13.3 0-24-10.7-24-24z" fill="#2f855a"/>
+  <path d="M40 136h176v26H40z" fill="#d6a85d"/>
+  <path d="M40 112h176v26H40z" fill="#c98b3a"/>
+  <path d="M40 88h176v26H40z" fill="#ead7a0"/>
+  <path d="M40 87h176M40 112h176M40 137h176M40 162h176" stroke="#0f2f2e" stroke-width="4" opacity=".45"/>
+  <rect x="116" y="36" width="24" height="126" rx="8" fill="url(#metal)"/>
+  <path d="M128 162l-18 34h36z" fill="#f8fafc"/>
+  <path d="M118 51h20M118 72h20M118 93h20M118 114h20M118 135h20" stroke="#334155" stroke-width="4" stroke-linecap="round" opacity=".75"/>
+  <rect x="154" y="54" width="48" height="62" rx="8" fill="#f8fafc"/>
+  <path d="M164 70h28M164 86h28M164 102h18" stroke="#0f766e" stroke-width="6" stroke-linecap="round"/>
+  <path d="M156 124h44" stroke="#f8fafc" stroke-width="9" stroke-linecap="round" opacity=".95"/>
+  <circle cx="61" cy="61" r="12" fill="#f8fafc" opacity=".95"/>
+  <path d="M61 45v32M45 61h32" stroke="#164e63" stroke-width="5" stroke-linecap="round"/>
+</svg>
