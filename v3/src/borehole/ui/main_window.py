@@ -36,11 +36,11 @@ from ..application.project_service import (
     next_borehole_prefix,
     next_profile_name,
 )
+from ..application.save_service import SaveService
 from ..application.undo_manager import BoreholeSnapshot, CompositeUndoAction, UndoAction, UndoManager, copy_layers, copy_tests
 from ..domain.enums import HoleType
 from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData, MAIN_FIELD_NAMES
 from ..domain.validators import validate_project
-from ..infrastructure.file_writer import generate_dirty_boreholes, backup_existing_file
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
 from ..infrastructure.xlsx_export import export_layer_test_summary
@@ -264,74 +264,15 @@ class MainWindow(QMainWindow):
 
     def _save_data_sync(self) -> bool:
         """同步保存数据（用于切换项目前）。返回是否保存成功。"""
-        from ..infrastructure.file_writer import generate_dirty_boreholes
-        dirty = self._project.dirty_boreholes()
-        deleted = list(self._project.deleted_boreholes)
-        dirty_profiles = [p for p in self._project.profile_files.values() if p.modified]
-        deleted_profiles = list(self._project.deleted_profiles)
-        dirty_project_files = [p for p in self._project.project_files.values() if p.modified]
-        if not dirty and not deleted and not dirty_profiles and not deleted_profiles and not dirty_project_files:
+        service = SaveService(self._project)
+        if not service.summary().has_changes:
             return True
         try:
-            generated = generate_dirty_boreholes(self._project)
-            # 保存剖面文件
-            for profile in dirty_profiles:
-                if profile.path:
-                    profile.path.parent.mkdir(parents=True, exist_ok=True)
-                    self._write_file_with_backup(profile.path, profile.content)
-                for suffix, content in profile.extra_files.items():
-                    ext_path = profile.path.parent / f"{profile.name}.-{suffix}"
-                    self._write_file_with_backup(ext_path, content)
-                for suffix in profile.deleted_extra_files:
-                    ext_path = profile.path.parent / f"{profile.name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, ext_path.parent / "tmp")
-                        ext_path.unlink()
-                profile.deleted_extra_files.clear()
-                profile.modified = False
-            # 删除剖面文件
-            for name, profile in list(self._project.deleted_profiles.items()):
-                if profile.path and profile.path.exists():
-                    backup_existing_file(profile.path, profile.path.parent / "tmp")
-                    profile.path.unlink()
-                for suffix in profile.extra_files:
-                    ext_path = profile.path.parent / f"{name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, ext_path.parent / "tmp")
-                        ext_path.unlink()
-            self._project.deleted_profiles.clear()
-            # 保存项目配置文件
-            for pf in dirty_project_files:
-                for suffix, content in pf.extra_files.items():
-                    ext_path = (self._project.folder or Path.cwd()) / f"{pf.name}.-{suffix}"
-                    self._write_file_with_backup(ext_path, content)
-                for suffix in pf.deleted_extra_files:
-                    ext_path = (self._project.folder or Path.cwd()) / f"{pf.name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, (self._project.folder or Path.cwd()) / "tmp")
-                        ext_path.unlink()
-                pf.deleted_extra_files.clear()
-                pf.modified = False
+            service.save()
             return True
         except Exception as e:
             QMessageBox.critical(self, "保存失败", f"保存数据时出错：{e}")
             return False
-
-    def _write_file_with_backup(self, path: Path, content: str) -> None:
-        """写入文件，自动检测编码并备份。"""
-        if not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        encoding = "utf-8"
-        if path.exists():
-            for enc in ("utf-8", "gbk", "ansi"):
-                try:
-                    path.read_text(encoding=enc)
-                    encoding = enc
-                    break
-                except (UnicodeDecodeError, UnicodeError):
-                    continue
-            backup_existing_file(path, path.parent / "tmp")
-        path.write_text(content, encoding=encoding)
 
     def _load_project_path(self, folder: Path) -> None:
         if self._busy:
@@ -1077,28 +1018,23 @@ class MainWindow(QMainWindow):
     def _save_data(self) -> None:
         if self._busy:
             return
-        dirty = self._project.dirty_boreholes()
-        deleted = list(self._project.deleted_boreholes)
-        # 检查剖面文件是否有修改
-        dirty_profiles = [p for p in self._project.profile_files.values() if p.modified]
-        deleted_profiles = list(self._project.deleted_profiles)
-        # 检查项目配置文件是否有修改
-        dirty_project_files = [p for p in self._project.project_files.values() if p.modified]
-        if not dirty and not deleted and not dirty_profiles and not deleted_profiles and not dirty_project_files:
+        service = SaveService(self._project)
+        summary = service.summary()
+        if not summary.has_changes:
             QMessageBox.information(self, "保存数据", "没有需要保存的数据。")
             return
 
         parts = []
-        if dirty:
-            parts.append("将保存钻孔：\n" + "\n".join(b.prefix for b in dirty))
-        if deleted:
-            parts.append("将删除钻孔：\n" + "\n".join(deleted))
-        if dirty_profiles:
-            parts.append("将保存剖面文件：\n" + "\n".join(p.name for p in dirty_profiles))
-        if deleted_profiles:
-            parts.append("将删除剖面文件：\n" + "\n".join(deleted_profiles))
-        if dirty_project_files:
-            parts.append("将保存项目配置文件：\n" + "\n".join(p.name for p in dirty_project_files))
+        if summary.dirty_boreholes:
+            parts.append("将保存钻孔：\n" + "\n".join(b.prefix for b in summary.dirty_boreholes))
+        if summary.deleted_boreholes:
+            parts.append("将删除钻孔：\n" + "\n".join(summary.deleted_boreholes))
+        if summary.dirty_profiles:
+            parts.append("将保存剖面文件：\n" + "\n".join(p.name for p in summary.dirty_profiles))
+        if summary.deleted_profiles:
+            parts.append("将删除剖面文件：\n" + "\n".join(summary.deleted_profiles))
+        if summary.dirty_project_files:
+            parts.append("将保存项目配置文件：\n" + "\n".join(p.name for p in summary.dirty_project_files))
         prompt = "\n\n".join(parts) + "\n\n是否继续？"
 
         reply = QMessageBox.question(self, "保存数据", prompt)
@@ -1108,84 +1044,7 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         self._status_label.setText("正在保存...")
 
-        def _detect_encoding(path: Path) -> str:
-            """检测文件编码，返回编码名称。"""
-            if not path.exists():
-                return "utf-8"
-            for encoding in ("utf-8", "gbk", "ansi"):
-                try:
-                    path.read_text(encoding=encoding)
-                    return encoding
-                except (UnicodeDecodeError, UnicodeError):
-                    continue
-            return "utf-8"
-
-        def _write_if_changed(path: Path, content: str) -> bool:
-            """只在内容有变化时写入文件，返回是否实际写入。"""
-            encoding = _detect_encoding(path)
-            if path.exists():
-                try:
-                    existing = path.read_text(encoding=encoding)
-                    if existing == content:
-                        return False
-                except (UnicodeDecodeError, UnicodeError):
-                    pass
-            backup_existing_file(path, path.parent / "tmp")
-            path.write_text(content, encoding=encoding)
-            return True
-
-        def save_all():
-            generated = generate_dirty_boreholes(self._project)
-            profile_count = 0
-            # 保存剖面文件
-            for profile in dirty_profiles:
-                if profile.path:
-                    profile.path.parent.mkdir(parents=True, exist_ok=True)
-                    if _write_if_changed(profile.path, profile.content):
-                        profile_count += 1
-                profile.modified = False
-                for suffix, content in profile.extra_files.items():
-                    ext_path = profile.path.parent / f"{profile.name}.-{suffix}"
-                    if _write_if_changed(ext_path, content):
-                        profile_count += 1
-                # 删除标记为删除的剖面附属文件
-                for suffix in profile.deleted_extra_files:
-                    ext_path = profile.path.parent / f"{profile.name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, ext_path.parent / "tmp")
-                        ext_path.unlink()
-                        profile_count += 1
-                profile.deleted_extra_files.clear()
-            # 删除剖面文件
-            for name, profile in list(self._project.deleted_profiles.items()):
-                if profile.path and profile.path.exists():
-                    backup_existing_file(profile.path, profile.path.parent / "tmp")
-                    profile.path.unlink()
-                    profile_count += 1
-                for suffix in profile.extra_files:
-                    ext_path = profile.path.parent / f"{name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, ext_path.parent / "tmp")
-                        ext_path.unlink()
-                        profile_count += 1
-            self._project.deleted_profiles.clear()
-            # 保存项目配置文件
-            for pf in dirty_project_files:
-                for suffix, content in pf.extra_files.items():
-                    ext_path = (self._project.folder or Path.cwd()) / f"{pf.name}.-{suffix}"
-                    if _write_if_changed(ext_path, content):
-                        profile_count += 1
-                for suffix in pf.deleted_extra_files:
-                    ext_path = (self._project.folder or Path.cwd()) / f"{pf.name}.-{suffix}"
-                    if ext_path.exists():
-                        backup_existing_file(ext_path, (self._project.folder or Path.cwd()) / "tmp")
-                        ext_path.unlink()
-                        profile_count += 1
-                pf.deleted_extra_files.clear()
-                pf.modified = False
-            return generated, profile_count
-
-        self._worker = _WorkerThread(save_all)
+        self._worker = _WorkerThread(lambda: service.save().as_tuple())
         self._worker.finished.connect(self._finish_save)
         self._worker.error.connect(lambda e: self._on_save_error(e))
         self._worker.start()

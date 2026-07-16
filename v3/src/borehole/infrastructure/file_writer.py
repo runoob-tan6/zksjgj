@@ -49,6 +49,19 @@ def _existing_newline(path: Path) -> str:
     return "\n"
 
 
+def encode_text_for_path(path: Path, text: str) -> bytes:
+    """Encode text using an existing file's encoding and newline convention."""
+    _existing, encoding = read_existing_text_with_encoding(path)
+    newline = _existing_newline(path)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\n", newline).encode(encoding)
+
+
+def text_would_change(path: Path, text: str) -> bool:
+    existing_text, _encoding = read_existing_text_with_encoding(path)
+    return normalize_for_compare(existing_text) != normalize_for_compare(text)
+
+
 def backup_existing_file(path: Path, backup_folder: Path | None = None) -> Path | None:
     if not path.exists():
         return None
@@ -61,15 +74,10 @@ def backup_existing_file(path: Path, backup_folder: Path | None = None) -> Path 
 
 
 def write_with_backup(path: Path, text: str, backup_folder: Path | None = None) -> bool:
-    existing_text, encoding = read_existing_text_with_encoding(path)
-    existing = normalize_for_compare(existing_text)
-    current = normalize_for_compare(text)
-    if existing == current:
+    if not text_would_change(path, text):
         return False
-    newline = _existing_newline(path)
     backup_existing_file(path, backup_folder)
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    path.write_bytes(normalized.replace("\n", newline).encode(encoding))
+    path.write_bytes(encode_text_for_path(path, text))
     return True
 
 
