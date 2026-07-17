@@ -81,10 +81,11 @@ class SaveService:
         self._mark_saved(summary)
         return SaveResult(generated=self.generated, profile_count=self.profile_count)
 
-    def _replace_text(self, path: Path, content: str) -> bool:
+    def _replace_text(self, path: Path, content: str, source_path: Path | None = None) -> bool:
         if not text_would_change(path, content):
             return False
-        self.transaction.replace(path, encode_text_for_path(path, content))
+        encoding_source = source_path if source_path is not None and source_path.exists() else path
+        self.transaction.replace(path, encode_text_for_path(encoding_source, content))
         return True
 
     def _delete(self, path: Path) -> bool:
@@ -163,14 +164,22 @@ class SaveService:
 
     def _plan_profiles(self, summary: SaveSummary) -> None:
         for profile in summary.dirty_profiles:
-            if self._replace_text(profile.path, profile.content):
+            old_name = profile.old_name if profile.old_name != profile.name else None
+            old_main = profile.path.parent / old_name if old_name else None
+            if self._replace_text(profile.path, profile.content, old_main):
                 self.profile_count += 1
             for suffix, content in profile.extra_files.items():
-                if self._replace_text(profile.path.parent / f"{profile.name}.-{suffix}", content):
+                old_extra = profile.path.parent / f"{old_name}.-{suffix}" if old_name else None
+                if self._replace_text(profile.path.parent / f"{profile.name}.-{suffix}", content, old_extra):
                     self.profile_count += 1
             for suffix in profile.deleted_extra_files:
                 if self._delete(profile.path.parent / f"{profile.name}.-{suffix}"):
                     self.profile_count += 1
+            if old_name:
+                self._delete(profile.path.parent / old_name)
+                old_suffixes = set(profile.extra_files) | profile.deleted_extra_files
+                for suffix in old_suffixes:
+                    self._delete(profile.path.parent / f"{old_name}.-{suffix}")
         for name, profile in self.project.deleted_profiles.items():
             if self._delete(profile.path):
                 self.profile_count += 1
@@ -200,6 +209,7 @@ class SaveService:
         for profile in summary.dirty_profiles:
             profile.modified = False
             profile.deleted_extra_files.clear()
+            profile.old_name = None
         for project_file in summary.dirty_project_files:
             project_file.modified = False
             project_file.deleted_extra_files.clear()

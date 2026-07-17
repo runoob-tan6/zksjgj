@@ -135,6 +135,7 @@ class ProfileFile:
     extra_files: dict[str, str] = field(default_factory=dict)
     deleted_extra_files: set[str] = field(default_factory=set)
     modified: bool = False
+    old_name: str | None = None
 
 
 @dataclass
