@@ -28,7 +28,8 @@ def test_save_service_commits_borehole_profile_and_project_files(legacy_project:
     assert not project_file.modified
     assert "5.0,33" in (legacy_project / "ZK1.-c").read_text(encoding="gbk")
     assert "更新的剖面" in (legacy_project / "H1").read_text(encoding="gbk")
-    assert "更新的配置" in (legacy_project / "0nzk.-zkt").read_text(encoding="gbk")
+    assert (legacy_project / "0nzk.-zkt").read_text(encoding="gbk") == "★"
+    assert (legacy_project / "0yzk.-zkt").read_text(encoding="utf-8") == "ZK1\n★"
 
 
 def test_save_service_keeps_dirty_state_when_transaction_fails(legacy_project: Path, monkeypatch) -> None:

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..application.column_chart_service import synchronize_column_charts
 from ..application.project_service import (
     copy_borehole,
     create_empty_project,
@@ -562,6 +563,7 @@ class MainWindow(QMainWindow):
             return
         borehole = create_new_borehole(self._project, prefix)
         self._get_undo_manager(borehole)
+        synchronize_column_charts(self._project)
         self._refresh_borehole_list()
         self._load_current_borehole(borehole)
         self._select_in_tree(prefix)
@@ -586,6 +588,7 @@ class MainWindow(QMainWindow):
             return
         borehole = copy_borehole(self._project, source, new_prefix)
         self._get_undo_manager(borehole)
+        synchronize_column_charts(self._project)
         self._refresh_borehole_list()
         self._load_current_borehole(borehole)
         self._select_in_tree(new_prefix)
@@ -605,6 +608,7 @@ class MainWindow(QMainWindow):
             self._project.deleted_boreholes[prefix] = borehole
         self._undo_managers.pop(id(borehole), None)
         next_bh = self._project.sorted_boreholes()[0] if self._project.boreholes else None
+        synchronize_column_charts(self._project)
         self._refresh_borehole_list()
         self._load_current_borehole(next_bh)
         if next_bh:
@@ -865,6 +869,7 @@ class MainWindow(QMainWindow):
         borehole.hole_type = HoleType.NZK if new_prefix.upper().startswith("NZK") else HoleType.ZK
         self._project.boreholes[new_prefix] = borehole
         self._current_borehole = borehole
+        synchronize_column_charts(self._project)
         self._refresh_borehole_list()
         self._select_in_tree(new_prefix)
         self._status_label.setText(f"当前钻孔：{new_prefix}")

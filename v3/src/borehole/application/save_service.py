@@ -16,6 +16,7 @@ from ..infrastructure.file_writer import (
     text_would_change,
 )
 from ..infrastructure.save_transaction import SaveTransaction
+from .column_chart_service import synchronize_column_charts
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,10 @@ class SaveService:
         self.profile_count = 0
 
     def summary(self) -> SaveSummary:
+        synchronize_column_charts(self.project)
+        return self._collect_summary()
+
+    def _collect_summary(self) -> SaveSummary:
         return SaveSummary(
             dirty_boreholes=tuple(self.project.dirty_boreholes()),
             deleted_boreholes=tuple(self.project.deleted_boreholes),
@@ -67,7 +72,8 @@ class SaveService:
         )
 
     def save(self) -> SaveResult:
-        summary = self.summary()
+        synchronize_column_charts(self.project)
+        summary = self._collect_summary()
         self._plan_boreholes(summary)
         self._plan_profiles(summary)
         self._plan_project_files(summary)

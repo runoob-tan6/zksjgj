@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from borehole.application.project_service import load_project
+from borehole.application.save_service import SaveService
 
 
 def _write_main(folder: Path, prefix: str) -> None:
@@ -36,3 +37,16 @@ def test_load_keeps_canonical_existing_column_charts_clean(tmp_path: Path) -> No
 
     assert not project.project_files["0yzk"].modified
     assert not project.project_files["0nzk"].modified
+
+
+def test_save_service_canonicalizes_changed_chart_and_creates_both_files(tmp_path: Path) -> None:
+    _write_main(tmp_path, "ZK1")
+    _write_main(tmp_path, "NZK1")
+    project = load_project(tmp_path)
+    project.project_files["0yzk"].extra_files["zkt"] = "错误内容"
+    project.project_files["0yzk"].modified = True
+
+    SaveService(project).save()
+
+    assert (tmp_path / "0yzk.-zkt").read_text(encoding="utf-8") == "ZK1\n★"
+    assert (tmp_path / "0nzk.-zkt").read_text(encoding="utf-8") == "NZK1\n★"
