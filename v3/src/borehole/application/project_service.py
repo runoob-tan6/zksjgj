@@ -9,6 +9,7 @@ from pathlib import Path
 from ..domain.enums import KNOWN_SUFFIXES, HoleType
 from ..domain.models import Borehole, MainFileData, ProjectData
 from ..infrastructure.file_parser import parse_borehole, read_text_file
+from .column_chart_service import synchronize_column_charts
 
 BOREHOLE_PATTERN: re.Pattern = re.compile(r"^(?:NZK|ZK)[A-Z]*\d+(?:-\d+)?$", re.IGNORECASE)
 PROFILE_PATTERN: re.Pattern = re.compile(r"^[HZ]\d+$", re.IGNORECASE)
@@ -107,6 +108,7 @@ def load_project(folder: Path) -> ProjectData:
             borehole.extra_files[suffix] = read_text_file(path)
             borehole.existing_suffixes.add(suffix)
         project.boreholes[normalized_prefix] = borehole
+    synchronize_column_charts(project)
     return project
 
 

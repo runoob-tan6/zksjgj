@@ -22,7 +22,7 @@ def test_save_service_commits_borehole_profile_and_project_files(legacy_project:
     result = SaveService(project).save()
 
     assert result.generated == [legacy_project / "ZK1.-c"]
-    assert result.profile_count == 2
+    assert result.profile_count == 3
     assert not borehole.dirty
     assert not profile.modified
     assert not project_file.modified

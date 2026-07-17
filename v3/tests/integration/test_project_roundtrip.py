@@ -20,7 +20,10 @@ def test_loading_legacy_project_does_not_change_any_bytes(legacy_project: Path) 
     assert project.boreholes["ZK1"].tests["q"][0].values == ["2.0", "2.3", "8"]
     assert project.boreholes["ZK1"].extra_files["x"] == "保留的未知文件\n"
     assert project.profile_files["H1"].extra_files["x"] == "剖面附属文件\n"
-    assert project.project_files["0nzk"].extra_files["zkt"] == "项目配置\n"
+    assert project.project_files["0yzk"].extra_files["zkt"] == "ZK1\n★"
+    assert project.project_files["0nzk"].extra_files["zkt"] == "★"
+    assert project.project_files["0yzk"].modified
+    assert project.project_files["0nzk"].modified
 
 
 def test_editing_one_layer_only_changes_requested_file(legacy_project: Path) -> None:
