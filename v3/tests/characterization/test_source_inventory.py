@@ -48,6 +48,7 @@ EXPECTED_MAIN_WINDOW_COMMANDS = {
     "_import_table_file",
     "_open_project_folder",
     "_redo",
+    "_rename_profile",
     "_reload_project",
     "_save_data",
     "_sync_description",

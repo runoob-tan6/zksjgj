@@ -5,6 +5,15 @@ from borehole.application.project_service import create_new_borehole
 from borehole.domain.models import ProfileFile, ProjectData
 
 
+def test_sync_ignores_project_without_loaded_folder() -> None:
+    project = ProjectData()
+
+    changed = synchronize_column_charts(project)
+
+    assert changed == set()
+    assert project.project_files == {}
+
+
 def test_sync_creates_both_column_charts_with_natural_hole_order(tmp_path: Path) -> None:
     project = ProjectData(folder=tmp_path)
     for prefix in ("ZK10", "NZK2", "ZK2", "NZK1"):

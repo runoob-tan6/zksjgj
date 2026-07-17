@@ -346,9 +346,9 @@ class MainWindow(QMainWindow):
                     ext_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                     ext_item.setData(0, Qt.ItemDataRole.UserRole, f"extra:{borehole.prefix}:{suffix}")
 
-            # 剖面及柱状图
+            # 剖面图
             if self._project.profile_files:
-                profile_node = QTreeWidgetItem(self._tree, ["剖面及柱状图"])
+                profile_node = QTreeWidgetItem(self._tree, ["剖面图"])
                 profile_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                 profile_node.setFont(0, bold_font)
                 profile_node.setExpanded(True)
@@ -363,9 +363,9 @@ class MainWindow(QMainWindow):
                         ext_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                         ext_item.setData(0, Qt.ItemDataRole.UserRole, f"profile_extra:{name}:{suffix}")
 
-            # 项目配置文件（0nzk.-zkt、0yzk.-zkt 等）
+            # 柱状图（0nzk.-zkt、0yzk.-zkt 等）
             if self._project.project_files:
-                proj_node = QTreeWidgetItem(self._tree, ["项目配置文件"])
+                proj_node = QTreeWidgetItem(self._tree, ["柱状图"])
                 proj_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                 proj_node.setFont(0, bold_font)
                 proj_node.setExpanded(True)
@@ -444,7 +444,7 @@ class MainWindow(QMainWindow):
                 )
                 self._tabs.setCurrentWidget(self._extra_text_page)
             return
-        # 项目配置文件
+        # 柱状图文件
         if prefix.startswith("project_file:"):
             parts = prefix.split(":")
             file_name = parts[1]
@@ -502,11 +502,11 @@ class MainWindow(QMainWindow):
         # 分类节点（无 UserRole 数据）
         if not prefix:
             item_text = item.text(0)
-            if item_text == "剖面及柱状图":
+            if item_text == "剖面图":
                 menu.addAction("新增剖面文件", self._add_profile)
                 menu.exec(self._tree.viewport().mapToGlobal(pos))
-            elif item_text == "项目配置文件":
-                menu.addAction("新增配置文件", self._add_project_file)
+            elif item_text == "柱状图":
+                menu.addAction("新增柱状图文件", self._add_project_file)
                 menu.exec(self._tree.viewport().mapToGlobal(pos))
             return
         # 钻孔
@@ -519,6 +519,7 @@ class MainWindow(QMainWindow):
         elif prefix.startswith("profile:") and not prefix.startswith("profile_extra:"):
             name = prefix[8:]
             menu.addAction("复制剖面文件", lambda: self._copy_profile(name))
+            menu.addAction("重命名剖面文件", lambda: self._rename_profile(name))
             menu.addSeparator()
             menu.addAction("删除剖面文件", lambda: self._delete_profile(name))
         # 剖面文件附属数据文件
@@ -527,7 +528,7 @@ class MainWindow(QMainWindow):
             profile_name = parts[1]
             suffix = parts[2]
             menu.addAction(f"删除 .-{suffix}", lambda: self._delete_profile_extra(profile_name, suffix))
-        # 项目配置文件
+        # 柱状图文件
         elif prefix.startswith("project_file:"):
             parts = prefix.split(":")
             file_name = parts[1]
@@ -650,6 +651,50 @@ class MainWindow(QMainWindow):
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已复制剖面文件 {name} → {new_name}。")
 
+    def _rename_profile(self, name: str) -> None:
+        profile = self._project.profile_files.get(name)
+        if not profile:
+            return
+        self._flush_active_editors()
+        from PySide6.QtWidgets import QInputDialog
+
+        new_name, ok = QInputDialog.getText(
+            self, "重命名剖面文件", "请输入新文件名（格式如 H3 或 Z1）：", text=name
+        )
+        if not ok or not new_name.strip():
+            return
+        new_name = new_name.strip().upper()
+        if new_name == name:
+            return
+        if not is_profile_prefix(new_name):
+            QMessageBox.warning(self, "提示", "文件名格式不正确，应为 H1、Z2 等格式。")
+            return
+        if new_name in self._project.profile_files:
+            QMessageBox.warning(self, "提示", f"剖面文件 {new_name} 已存在。")
+            return
+
+        folder = self._project.folder or profile.path.parent
+        disk_name = profile.old_name or profile.name
+        current_paths = {folder / disk_name}
+        current_paths.update(folder / f"{disk_name}.-{suffix}" for suffix in profile.extra_files)
+        target_paths = [folder / new_name]
+        target_paths.extend(folder / f"{new_name}.-{suffix}" for suffix in profile.extra_files)
+        conflict = next((path for path in target_paths if path.exists() and path not in current_paths), None)
+        if conflict:
+            QMessageBox.warning(self, "提示", f"目标文件已存在：{conflict.name}")
+            return
+
+        if profile.old_name is None:
+            profile.old_name = name
+        del self._project.profile_files[name]
+        profile.name = new_name
+        profile.path = folder / new_name
+        profile.modified = True
+        self._project.profile_files[new_name] = profile
+        self._refresh_borehole_list()
+        self._select_in_tree(f"profile:{new_name}")
+        self._status_label.setText(f"已重命名剖面文件 {name} → {new_name}。")
+
     def _add_profile(self) -> None:
         if not self._project.folder:
             QMessageBox.information(self, "提示", "请先选择项目文件夹。")
@@ -721,14 +766,14 @@ class MainWindow(QMainWindow):
             return
         from PySide6.QtWidgets import QInputDialog
 
-        name, ok = QInputDialog.getText(self, "新增配置文件", "请输入文件名前缀（如 0nzk、0yzk）：")
+        name, ok = QInputDialog.getText(self, "新增柱状图文件", "请输入文件名前缀（如 0nzk、0yzk）：")
         if not ok or not name.strip():
             return
         name = name.strip()
         if not name.startswith("0"):
-            QMessageBox.warning(self, "提示", "配置文件名应以 0 开头，如 0nzk、0yzk。")
+            QMessageBox.warning(self, "提示", "柱状图文件名应以 0 开头，如 0nzk、0yzk。")
             return
-        suffix, ok = QInputDialog.getText(self, "新增配置文件", "请输入文件后缀（如 zkt）：", text="zkt")
+        suffix, ok = QInputDialog.getText(self, "新增柱状图文件", "请输入文件后缀（如 zkt）：", text="zkt")
         if not ok or not suffix.strip():
             return
         suffix = suffix.strip().lstrip(".-")
@@ -746,14 +791,14 @@ class MainWindow(QMainWindow):
         pf.extra_files[suffix] = ""
         self._refresh_borehole_list()
         self._select_in_tree(f"project_file:{name}:{suffix}")
-        self._status_label.setText(f"已新增配置文件 {full_key}。")
+        self._status_label.setText(f"已新增柱状图文件 {full_key}。")
 
     def _delete_project_file(self, file_name: str, suffix: str) -> None:
         pf = self._project.project_files.get(file_name)
         if not pf or suffix not in pf.extra_files:
             return
         reply = QMessageBox.question(
-            self, "删除配置文件", f"确定删除 {file_name}.-{suffix}？\n\n点击保存数据后，会备份并删除该文件。"
+            self, "删除柱状图文件", f"确定删除 {file_name}.-{suffix}？\n\n点击保存数据后，会备份并删除该文件。"
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -1044,7 +1089,7 @@ class MainWindow(QMainWindow):
         if summary.deleted_profiles:
             parts.append("将删除剖面文件：\n" + "\n".join(summary.deleted_profiles))
         if summary.dirty_project_files:
-            parts.append("将保存项目配置文件：\n" + "\n".join(p.name for p in summary.dirty_project_files))
+            parts.append("将保存柱状图文件：\n" + "\n".join(p.name for p in summary.dirty_project_files))
         prompt = "\n\n".join(parts) + "\n\n是否继续？"
 
         reply = QMessageBox.question(self, "保存数据", prompt)
@@ -1063,7 +1108,7 @@ class MainWindow(QMainWindow):
         saved_extra_suffix = self._current_extra_suffix
         saved_borehole = self._current_borehole
         self._refresh_borehole_list()
-        # 保存后恢复到之前编辑的位置（剖面文件、配置文件或钻孔）
+        # 保存后恢复到之前编辑的位置（剖面文件、柱状图文件或钻孔）
         if saved_extra_profile:
             if saved_extra_suffix:
                 self._select_in_tree(f"profile_extra:{saved_extra_profile.name}:{saved_extra_suffix}")

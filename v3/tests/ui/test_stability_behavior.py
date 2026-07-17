@@ -30,6 +30,7 @@ def test_summary_ignores_non_finite_depths(qtbot, monkeypatch, tmp_path: Path) -
 
     assert window._summary_label.text().startswith("总深度：10 m")
     assert "取样：1" in window._summary_label.text()
+    window._project = ProjectData()
     window.close()
 
 

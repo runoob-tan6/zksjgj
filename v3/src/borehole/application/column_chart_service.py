@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from ..domain.enums import HoleType
 from ..domain.models import END_MARK, ProfileFile, ProjectData
 
@@ -20,7 +18,9 @@ def render_column_chart(project: ProjectData, hole_type: HoleType) -> str:
 
 
 def synchronize_column_charts(project: ProjectData) -> set[str]:
-    folder = project.folder or Path.cwd()
+    if project.folder is None:
+        return set()
+    folder = project.folder
     changed: set[str] = set()
     for name, hole_type in COLUMN_CHARTS.items():
         chart = project.project_files.get(name)
