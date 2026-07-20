@@ -948,7 +948,7 @@ class MainWindow(QMainWindow):
                 for layer in bh.layers:
                     if (layer.lithology_code == lithology_code
                             and layer.weathering == weathering
-                            and (not formation or layer.formation == formation)
+                            and layer.formation == formation
                             and not layer.description):
                         affected.append((bh, layer))
 
@@ -973,10 +973,7 @@ class MainWindow(QMainWindow):
             if actions:
                 manager = self._get_undo_manager(self._current_borehole)
                 if manager:
-                    if len(actions) == 1:
-                        manager.push(actions[0])
-                    else:
-                        manager.push_composite(CompositeUndoAction(actions=actions, label="同步岩性描述"))
+                    manager.push_composite(CompositeUndoAction(actions=actions, label="同步岩性描述"))
                 self._update_undo_controls()
 
             count = len(affected_boreholes)
@@ -1022,7 +1019,8 @@ class MainWindow(QMainWindow):
             return
         if isinstance(action, CompositeUndoAction):
             for a in reversed(action.actions):
-                self._apply_snapshot(a.borehole, a.before)
+                self._apply_snapshot(a.borehole, a.before, activate=False)
+            self._refresh_borehole_list()
             manager.push_redo(action)
         else:
             self._apply_snapshot(action.borehole, action.before)
@@ -1039,7 +1037,8 @@ class MainWindow(QMainWindow):
             return
         if isinstance(action, CompositeUndoAction):
             for a in action.actions:
-                self._apply_snapshot(a.borehole, a.after)
+                self._apply_snapshot(a.borehole, a.after, activate=False)
+            self._refresh_borehole_list()
             manager.push_undo_without_clearing_redo(action)
         else:
             self._apply_snapshot(action.borehole, action.after)
@@ -1047,13 +1046,17 @@ class MainWindow(QMainWindow):
         self._status_label.setText(f"已恢复：{action.label}")
         self._update_undo_controls()
 
-    def _apply_snapshot(self, borehole: Borehole, snapshot: BoreholeSnapshot) -> None:
+    def _apply_snapshot(
+        self, borehole: Borehole, snapshot: BoreholeSnapshot, *, activate: bool = True
+    ) -> None:
         old_key = borehole.prefix
         if old_key in self._project.boreholes and self._project.boreholes[old_key] is borehole:
             del self._project.boreholes[old_key]
         snapshot.restore(borehole)
         borehole.dirty = True
         self._project.boreholes[borehole.prefix] = borehole
+        if not activate:
+            return
         self._current_borehole = borehole
         self._refresh_borehole_list()
         self._load_current_borehole(borehole)

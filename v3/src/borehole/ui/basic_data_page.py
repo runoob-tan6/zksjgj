@@ -96,11 +96,11 @@ class BasicLayerModel(QAbstractTableModel):
             self.before_set_data()
         setattr(layer, attr, formatted)
         self.dataChanged.emit(index, index)
-        # 岩性描述同步：修改了 description 列时通知
-        if index.column() == 6 and not self._loading and self.on_description_changed:
-            self.on_description_changed(formatted, layer.lithology_code, layer.formation, layer.weathering)
         if not self._loading and self.after_set_data:
             self.after_set_data()
+        # 岩性描述同步在源编辑提交后执行，确保同步提示和撤销动作保持在最后。
+        if index.column() == 6 and not self._loading and self.on_description_changed:
+            self.on_description_changed(formatted, layer.lithology_code, layer.formation, layer.weathering)
         return True
 
     def get_layer(self, row: int) -> BasicLayer | None:
