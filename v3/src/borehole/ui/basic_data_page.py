@@ -32,7 +32,7 @@ class BasicLayerModel(QAbstractTableModel):
         self._loading = False
         self.before_set_data: Callable[[], None] | None = None
         self.after_set_data: Callable[[], None] | None = None
-        self.on_description_changed: Callable[[str, str, str, str], None] | None = None
+        self.on_description_changed: Callable[[str, str, str, str, str], None] | None = None
 
     def load(self, layers: list[BasicLayer]) -> None:
         self._loading = True
@@ -100,7 +100,9 @@ class BasicLayerModel(QAbstractTableModel):
             self.after_set_data()
         # 岩性描述同步在源编辑提交后执行，确保同步提示和撤销动作保持在最后。
         if index.column() == 6 and not self._loading and self.on_description_changed:
-            self.on_description_changed(formatted, layer.lithology_code, layer.formation, layer.weathering)
+            self.on_description_changed(
+                str(old_value), formatted, layer.lithology_code, layer.formation, layer.weathering
+            )
         return True
 
     def get_layer(self, row: int) -> BasicLayer | None:
@@ -126,7 +128,7 @@ class BasicDataPage(QWidget):
     """基础数据编辑页。"""
 
     layer_changed = Signal(str)
-    description_changed = Signal(str, str, str, str)  # (description, lithology_code, formation, weathering)
+    description_changed = Signal(str, str, str, str, str)
 
     def __init__(
         self,
@@ -194,9 +196,11 @@ class BasicDataPage(QWidget):
             self._edit_token = None
         self._mark_all_dirty()
 
-    def _emit_description_changed(self, desc: str, litho: str, form: str, weathering: str) -> None:
+    def _emit_description_changed(
+        self, old_desc: str, desc: str, litho: str, form: str, weathering: str
+    ) -> None:
         if desc and litho:
-            self.description_changed.emit(desc, litho, form, weathering)
+            self.description_changed.emit(old_desc, desc, litho, form, weathering)
 
     def _add_layer(self) -> None:
         if not self._borehole:

@@ -24,7 +24,7 @@ class MainFilePage(QWidget):
     field_changed = Signal(int, str, str)
     hole_id_changed = Signal(str, str)
     layer_changed = Signal(str)
-    description_changed = Signal(str, str, str, str)
+    description_changed = Signal(str, str, str, str, str)
 
     def __init__(
         self,

@@ -935,22 +935,45 @@ class MainWindow(QMainWindow):
             self._select_in_tree(prefix)
             self._status_label.setText(f"{prefix} 已修改。")
 
-    def _sync_description(self, description: str, lithology_code: str, formation: str, weathering: str) -> None:
+    def _sync_description(
+        self,
+        old_description: str,
+        description: str,
+        lithology_code: str,
+        formation: str,
+        weathering: str,
+    ) -> None:
         """将岩性描述同步到所有匹配 (岩性代号, 地层时代, 风化程度) 的其他钻孔。"""
         if self._syncing or not self._current_borehole:
             return
         self._syncing = True
         try:
-            affected: list[tuple[Borehole, BasicLayer]] = []
+            empty_descriptions: list[tuple[Borehole, BasicLayer]] = []
+            same_descriptions: list[tuple[Borehole, BasicLayer]] = []
             for prefix, bh in self._project.boreholes.items():
                 if bh is self._current_borehole:
                     continue
                 for layer in bh.layers:
                     if (layer.lithology_code == lithology_code
                             and layer.weathering == weathering
-                            and layer.formation == formation
-                            and not layer.description):
-                        affected.append((bh, layer))
+                            and layer.formation == formation):
+                        if not layer.description:
+                            empty_descriptions.append((bh, layer))
+                        elif old_description and layer.description == old_description:
+                            same_descriptions.append((bh, layer))
+
+            affected = list(empty_descriptions)
+            if same_descriptions:
+                reply = QMessageBox.question(
+                    self,
+                    "同步岩性描述",
+                    f"发现 {len(same_descriptions)} 处其他钻孔的相同地层描述仍为修改前内容。\n\n"
+                    "是否全部同步为新描述？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    affected.extend(same_descriptions)
 
             if not affected:
                 return
