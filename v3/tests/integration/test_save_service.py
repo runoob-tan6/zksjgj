@@ -50,3 +50,16 @@ def test_save_service_keeps_dirty_state_when_transaction_fails(legacy_project: P
     assert borehole.dirty
     assert borehole.dirty_suffixes == {"c"}
     assert (legacy_project / "ZK1.-c").read_bytes() == original
+
+
+def test_save_service_omits_incomplete_h_description_records(legacy_project: Path) -> None:
+    project = load_project(legacy_project)
+    borehole = project.boreholes["ZK1"]
+    borehole.layers[1].description = ""
+    borehole.mark_dirty("h")
+
+    SaveService(project).save()
+
+    content = (legacy_project / "ZK1.-h").read_text(encoding="gbk")
+    assert content == "#5.0\n粉质黏土\n★"
+    assert "\n\n" not in content

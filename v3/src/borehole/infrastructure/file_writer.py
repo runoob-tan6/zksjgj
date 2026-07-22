@@ -101,9 +101,10 @@ def render_pair_file(rows: list[tuple[str, str]], skip_empty_value: bool = False
 def render_h_file(borehole: Borehole) -> str:
     lines: list[str] = []
     for layer in borehole.layers:
-        if layer.bottom_depth or layer.description:
-            lines.append(f"#{layer.bottom_depth}")
-            lines.append(layer.description)
+        depth = str(layer.bottom_depth or "").strip()
+        description = str(layer.description or "").strip()
+        if depth and description:
+            lines.extend((f"#{depth}", description))
     return make_file_text(lines)
 
 
