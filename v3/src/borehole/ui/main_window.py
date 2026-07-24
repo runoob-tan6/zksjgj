@@ -64,6 +64,13 @@ class _ChangeToken(TypedDict):
     before: BoreholeSnapshot
 
 
+def _profile_sort_key(name: str) -> tuple[int, str, int, str]:
+    suffix = name[1:]
+    if len(name) > 1 and name[0].upper() in {"H", "Z"} and suffix.isdigit():
+        return 0, name[0].upper(), int(suffix), name.casefold()
+    return 1, "", 0, name.casefold()
+
+
 class MainWindow(QMainWindow):
     """钻孔数据编辑工具主窗口。"""
 
@@ -352,7 +359,7 @@ class MainWindow(QMainWindow):
                 profile_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                 profile_node.setFont(0, bold_font)
                 profile_node.setExpanded(True)
-                for name in sorted(self._project.profile_files.keys()):
+                for name in sorted(self._project.profile_files, key=_profile_sort_key):
                     profile = self._project.profile_files[name]
                     item = QTreeWidgetItem(profile_node, [name])
                     item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)

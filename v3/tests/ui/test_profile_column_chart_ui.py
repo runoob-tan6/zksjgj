@@ -59,6 +59,26 @@ def _top_level_labels(window: MainWindow) -> list[str]:
     return [window._tree.topLevelItem(index).text(0) for index in range(window._tree.topLevelItemCount())]
 
 
+def test_profile_list_uses_natural_numeric_order(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    names = ("H10", "H2", "H1", "Z10", "Z2", "Z1")
+    window._project.profile_files = {
+        name: ProfileFile(name=name, path=tmp_path / name) for name in names
+    }
+
+    window._refresh_borehole_list()
+
+    profile_node = next(
+        window._tree.topLevelItem(index)
+        for index in range(window._tree.topLevelItemCount())
+        if window._tree.topLevelItem(index).text(0) == "剖面图"
+    )
+    labels = [profile_node.child(index).text(0) for index in range(profile_node.childCount())]
+    assert labels == ["H1", "H2", "H10", "Z1", "Z2", "Z10"]
+    window._project = create_empty_project()
+    window.close()
+
+
 def test_tree_uses_profile_and_column_chart_group_labels(qtbot, monkeypatch, tmp_path: Path) -> None:
     window = _window(qtbot, monkeypatch, tmp_path)
     window._project = _project_with_profile(tmp_path)
