@@ -191,10 +191,11 @@ class BasicDataPage(QWidget):
             self._edit_token = self._begin_change(self._borehole, "修改基础数据")
 
     def _on_after_edit(self) -> None:
-        if self._edit_token and self._end_change:
-            self._end_change(self._edit_token)
-            self._edit_token = None
+        token = self._edit_token
+        self._edit_token = None
         self._mark_all_dirty()
+        if token and self._end_change:
+            self._end_change(token)
 
     def _emit_description_changed(
         self, old_desc: str, desc: str, litho: str, form: str, weathering: str

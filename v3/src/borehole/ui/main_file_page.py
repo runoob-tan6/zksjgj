@@ -188,9 +188,11 @@ class MainFilePage(QWidget):
         lines = self._borehole.main.normalized_lines()
         if lines[1] == formatted:
             return
+        old_depth = lines[1]
         self._loading = True
         self._borehole.main.lines[1] = formatted
         self._borehole.main.lines[12] = formatted
         if 1 in self._entries:
             self._entries[1].setText(formatted)
         self._loading = False
+        self.field_changed.emit(1, old_depth, formatted)
