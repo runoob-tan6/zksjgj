@@ -98,3 +98,16 @@ def test_commit_reports_missing_prepared_temporary_as_transaction_error(tmp_path
 
     with pytest.raises(SaveTransactionError, match="临时文件"):
         transaction.commit()
+
+
+def test_successful_commits_keep_only_latest_twenty_backups_per_target(tmp_path: Path) -> None:
+    target = tmp_path / "ZK1"
+    target.write_bytes(b"initial")
+
+    for index in range(25):
+        transaction = SaveTransaction()
+        transaction.replace(target, f"value-{index}".encode())
+        transaction.commit()
+
+    backups = list((tmp_path / "tmp").glob("ZK1.*.bak"))
+    assert len(backups) == 20

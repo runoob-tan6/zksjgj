@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, QThread, Signal
+
+logger = logging.getLogger(__name__)
 
 
 class _TaskThread(QThread):
@@ -20,6 +23,7 @@ class _TaskThread(QThread):
         try:
             self.succeeded.emit(self._operation())
         except Exception as error:
+            logger.exception("Background task failed")
             self.failed.emit(str(error))
 
 
@@ -65,6 +69,7 @@ class TaskRunner(QObject):
         try:
             callback(result)
         except Exception as error:
+            logger.exception("Background task success callback failed")
             self._handle_error(str(error))
 
     def _handle_error(self, error: str) -> None:

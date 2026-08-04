@@ -27,6 +27,11 @@ python -m ruff check src tests tools
 python -m mypy src tools
 ```
 
+## 日志与备份
+
+- 运行日志写入程序目录下的 `.Data/logs/borehole-v3.log`，按天滚动并保留 30 天；程序目录不可写时自动改用 Windows 本地应用数据目录。
+- 项目原文件备份保存在项目的 `tmp` 目录。每个原文件最多保留最近 20 份 `.bak`，保存失败回滚所需的当前备份不会被提前清理。
+
 ## 打包
 
 双击 `打包exe.bat`，或执行：

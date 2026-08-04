@@ -1,5 +1,6 @@
 from threading import Event
 
+import borehole.application.task_runner as task_runner_module
 import borehole.ui.main_window as main_window_module
 from borehole.application.task_runner import TaskRunner
 from borehole.ui.main_window import MainWindow
@@ -58,6 +59,20 @@ def test_task_runner_rejects_overlapping_task(qtbot) -> None:
     qtbot.waitUntil(lambda: not runner.running)
 
     assert calls == ["first"]
+
+
+def test_task_runner_logs_background_traceback(qtbot, monkeypatch) -> None:
+    runner = TaskRunner()
+    logged: list[str] = []
+    monkeypatch.setattr(task_runner_module.logger, "exception", lambda message: logged.append(message))
+
+    def fail() -> None:
+        raise RuntimeError("task failed")
+
+    assert runner.start(fail, lambda _result: None, lambda _error: None)
+    qtbot.waitUntil(lambda: not runner.running)
+
+    assert logged == ["Background task failed"]
 
 
 def test_main_window_centralizes_busy_state_and_rejects_overlap(qtbot, monkeypatch) -> None:

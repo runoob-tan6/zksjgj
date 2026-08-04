@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from math import isfinite
@@ -57,6 +58,8 @@ from .info_pages import EditableTextPage, RawTextPage, ValidationPage
 from .main_file_page import MainFilePage
 from .spt_analysis_page import SPTAnalysisPage
 from .test_data_page import TestDataPage
+
+logger = logging.getLogger(__name__)
 
 
 class _ChangeToken(TypedDict):
@@ -265,8 +268,9 @@ class MainWindow(QMainWindow):
         try:
             service.save()
             return True
-        except Exception as e:
-            QMessageBox.critical(self, "保存失败", f"保存数据时出错：{e}")
+        except Exception as error:
+            logger.exception("Synchronous save failed")
+            QMessageBox.critical(self, "保存失败", f"保存数据时出错：{error}")
             return False
 
     def _load_project_path(self, folder: Path) -> None:

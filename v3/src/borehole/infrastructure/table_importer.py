@@ -19,6 +19,7 @@ from typing import Any
 
 from ..application.project_service import load_project
 from ..domain.models import ProjectData
+from .backup_policy import create_backup, prune_backups
 
 WATER = "水位"
 TIME = "时间"
@@ -367,24 +368,8 @@ def _import_csv_rows(
     return load_project(project_folder)
 
 
-def _detect_file_encoding(path: Path) -> str:
-    """检测文件编码。"""
-    for encoding in ("utf-8", "gbk", "ansi"):
-        try:
-            path.read_text(encoding=encoding)
-            return encoding
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-    return "utf-8"
-
-
 def _backup_with_encoding(file_path: Path, project_folder: Path) -> None:
-    """备份文件，使用编码检测和带时间戳的文件名。"""
-    from datetime import datetime
+    """Back up imported-over files without decoding or rewriting their bytes."""
     backup_dir = project_folder / "tmp"
-    backup_dir.mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = backup_dir / f"{file_path.name}.{timestamp}.bak"
-    encoding = _detect_file_encoding(file_path)
-    content = file_path.read_text(encoding=encoding)
-    backup.write_text(content, encoding=encoding)
+    create_backup(file_path, backup_dir)
+    prune_backups(backup_dir, file_path.name)

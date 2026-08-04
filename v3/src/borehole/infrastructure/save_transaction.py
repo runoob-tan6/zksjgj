@@ -6,9 +6,9 @@ import os
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
+
+from .backup_policy import create_backup, prune_backups
 
 
 class SaveTransactionError(RuntimeError):
@@ -50,6 +50,7 @@ class SaveTransaction:
                 os.replace(operation.temporary, operation.target)
                 operation.temporary = None
                 operation.applied = True
+            self._prune_backups(operations)
         except Exception as error:
             rollback_errors = self._rollback(operations)
             detail = f"保存事务失败：{error}"
@@ -61,7 +62,6 @@ class SaveTransaction:
             self._operations.clear()
 
     def _prepare(self, operations: list[_Operation]) -> None:
-        stamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
         for operation in operations:
             operation.target.parent.mkdir(parents=True, exist_ok=True)
             operation.existed = operation.target.exists()
@@ -74,10 +74,13 @@ class SaveTransaction:
                 operation.temporary.write_bytes(operation.content)
             if operation.existed:
                 backup_dir = operation.target.parent / "tmp"
-                backup_dir.mkdir(parents=True, exist_ok=True)
-                backup_name = f"{operation.target.name}.{stamp}.{uuid4().hex[:8]}.bak"
-                operation.backup = backup_dir / backup_name
-                shutil.copy2(operation.target, operation.backup)
+                operation.backup = create_backup(operation.target, backup_dir)
+
+    @staticmethod
+    def _prune_backups(operations: list[_Operation]) -> None:
+        for operation in operations:
+            if operation.backup is not None:
+                prune_backups(operation.backup.parent, operation.target.name)
 
     @staticmethod
     def _rollback(operations: list[_Operation]) -> list[str]:

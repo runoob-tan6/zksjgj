@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from .infrastructure.logging_setup import install_exception_hook, setup_logging
 from .ui.main_window import MainWindow
+
+
+def _qt_message_handler(message_type: QtMsgType, _context: QMessageLogContext, message: str) -> None:
+    levels = {
+        QtMsgType.QtDebugMsg: logging.DEBUG,
+        QtMsgType.QtInfoMsg: logging.INFO,
+        QtMsgType.QtWarningMsg: logging.WARNING,
+        QtMsgType.QtCriticalMsg: logging.ERROR,
+        QtMsgType.QtFatalMsg: logging.CRITICAL,
+    }
+    logging.getLogger("borehole.qt").log(levels.get(message_type, logging.INFO), message)
 
 
 def _get_icon_path() -> Path | None:
@@ -26,6 +40,10 @@ def _get_icon_path() -> Path | None:
 
 
 def main() -> None:
+    log_path = setup_logging()
+    install_exception_hook()
+    qInstallMessageHandler(_qt_message_handler)
+    logging.getLogger(__name__).info("Application starting; log=%s", log_path)
     if sys.platform == "win32":
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("BoreholeEditor.v3")
