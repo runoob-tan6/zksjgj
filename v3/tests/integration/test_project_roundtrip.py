@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from borehole.application.project_service import load_project
-from borehole.infrastructure.file_writer import generate_borehole, write_with_backup
+from borehole.application.save_service import SaveService
 
 
 def _snapshot(folder: Path) -> dict[str, bytes]:
@@ -28,34 +28,48 @@ def test_loading_legacy_project_does_not_change_any_bytes(legacy_project: Path) 
 
 def test_editing_one_layer_only_changes_requested_file(legacy_project: Path) -> None:
     project = load_project(legacy_project)
+    SaveService(project).save()
     borehole = project.boreholes["ZK1"]
     before = _snapshot(legacy_project)
     borehole.layers[0].lithology_code = "33"
     borehole.mark_dirty("c")
 
-    changed = generate_borehole(borehole)
+    result = SaveService(project).save()
 
-    assert changed == [legacy_project / "ZK1.-c"]
+    assert result.generated == [legacy_project / "ZK1.-c"]
     after = _snapshot(legacy_project)
     assert {name for name in before if before[name] != after[name]} == {"ZK1.-c"}
     assert (legacy_project / "ZK1.-x").read_bytes() == before["ZK1.-x"]
 
 
-def test_write_with_backup_preserves_gbk_and_crlf(tmp_path: Path) -> None:
-    target = tmp_path / "ZK1"
-    target.write_bytes("旧值\r\n★".encode("gbk"))
+def test_save_service_preserves_gbk_and_crlf(legacy_project: Path) -> None:
+    target = legacy_project / "ZK1"
+    project = load_project(legacy_project)
+    borehole = project.boreholes["ZK1"]
+    borehole.main.lines[3] = "新地点"
+    borehole.mark_dirty("main")
 
-    changed = write_with_backup(target, "新值\n★", tmp_path / "tmp")
+    result = SaveService(project).save()
 
-    assert changed
-    assert target.read_bytes() == "新值\r\n★".encode("gbk")
-    assert len(list((tmp_path / "tmp").glob("ZK1.*.bak"))) == 1
+    content = target.read_bytes()
+    assert result.generated == [target]
+    assert "新地点" in content.decode("gbk")
+    assert b"\r\n" in content
+    assert len(list((legacy_project / "tmp").glob("ZK1.*.bak"))) == 1
 
 
-def test_write_with_backup_preserves_lf(tmp_path: Path) -> None:
-    target = tmp_path / "ZK1"
-    target.write_bytes("old\n★".encode())
+def test_save_service_preserves_utf8_and_lf(legacy_project: Path) -> None:
+    target = legacy_project / "ZK1"
+    original = target.read_text(encoding="gbk")
+    target.write_text(original, encoding="utf-8", newline="\n")
+    project = load_project(legacy_project)
+    borehole = project.boreholes["ZK1"]
+    borehole.main.lines[3] = "new place"
+    borehole.mark_dirty("main")
 
-    write_with_backup(target, "new\n★", tmp_path / "tmp")
+    SaveService(project).save()
 
-    assert target.read_bytes() == b"new\n\xe2\x98\x85"
+    content = target.read_bytes()
+    assert b"new place" in content
+    assert b"\r\n" not in content
+    assert content.decode("utf-8").endswith("\n★")
