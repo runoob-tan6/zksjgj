@@ -86,3 +86,20 @@ def test_save_summary_reports_stale_column_chart_without_mutating_it(tmp_path: P
     assert "0yzk" in summary.pending_column_charts
     assert chart.extra_files == {"zkt": "错误内容"}
     assert not chart.modified
+
+
+def test_reusing_save_service_does_not_accumulate_previous_results(legacy_project: Path) -> None:
+    project = load_project(legacy_project)
+    service = SaveService(project)
+    service.save()
+    borehole = project.boreholes["ZK1"]
+    borehole.layers[0].lithology_code = "33"
+    borehole.mark_dirty("c")
+
+    first = service.save()
+    borehole.layers[0].description = "更新描述"
+    borehole.mark_dirty("h")
+    second = service.save()
+
+    assert first.generated == [legacy_project / "ZK1.-c"]
+    assert second.generated == [legacy_project / "ZK1.-h"]

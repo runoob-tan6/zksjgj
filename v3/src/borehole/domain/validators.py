@@ -105,7 +105,6 @@ def validate_borehole(borehole: Borehole) -> list[str]:
             if borehole.tests.get(suffix):
                 messages.append(f"NZK 土钻孔不应有 .-{suffix} 试验数据。")
 
-    borehole.validation_messages = messages
     return messages
 
 

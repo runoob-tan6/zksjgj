@@ -45,7 +45,8 @@ class SaveTransaction:
                         operation.target.unlink()
                         operation.applied = True
                     continue
-                assert operation.temporary is not None
+                if operation.temporary is None:
+                    raise SaveTransactionError(f"未准备保存临时文件：{operation.target}")
                 os.replace(operation.temporary, operation.target)
                 operation.temporary = None
                 operation.applied = True
@@ -57,6 +58,7 @@ class SaveTransaction:
             raise SaveTransactionError(detail) from error
         finally:
             self._cleanup_temporaries(operations)
+            self._operations.clear()
 
     def _prepare(self, operations: list[_Operation]) -> None:
         stamp = datetime.now().strftime("%Y%m%d%H%M%S%f")

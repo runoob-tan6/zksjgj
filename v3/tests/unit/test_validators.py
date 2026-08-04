@@ -77,3 +77,12 @@ class TestValidateBorehole:
         b.tests["e"] = [Record(values=["5", "80"])]
         msgs = validate_borehole(b)
         assert any("NZK" in m and "e" in m for m in msgs)
+
+    def test_validation_does_not_mutate_borehole_messages(self):
+        b = _make_borehole(depth="")
+        b.validation_messages = ["existing"]
+
+        msgs = validate_borehole(b)
+
+        assert any("孔深" in message for message in msgs)
+        assert b.validation_messages == ["existing"]

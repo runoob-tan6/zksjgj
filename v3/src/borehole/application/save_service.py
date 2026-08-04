@@ -74,6 +74,9 @@ class SaveService:
         )
 
     def save(self) -> SaveResult:
+        self.transaction = SaveTransaction()
+        self.generated = []
+        self.profile_count = 0
         synchronize_column_charts(self.project)
         summary = self._collect_summary()
         self._plan_boreholes(summary)
@@ -81,7 +84,7 @@ class SaveService:
         self._plan_project_files(summary)
         self.transaction.commit()
         self._mark_saved(summary)
-        return SaveResult(generated=self.generated, profile_count=self.profile_count)
+        return SaveResult(generated=list(self.generated), profile_count=self.profile_count)
 
     def _replace_text(self, path: Path, content: str, source_path: Path | None = None) -> bool:
         if not text_would_change(path, content):

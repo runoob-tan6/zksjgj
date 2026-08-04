@@ -75,3 +75,26 @@ def test_new_file_is_removed_when_later_commit_fails(tmp_path: Path, monkeypatch
 
     assert not new_file.exists()
     assert existing.read_bytes() == b"old"
+
+
+def test_successful_commit_clears_operations(tmp_path: Path) -> None:
+    target = tmp_path / "ZK1"
+    target.write_bytes(b"old")
+    transaction = SaveTransaction()
+    transaction.replace(target, b"first-save")
+
+    transaction.commit()
+    target.write_bytes(b"external-change")
+    transaction.commit()
+
+    assert target.read_bytes() == b"external-change"
+
+
+def test_commit_reports_missing_prepared_temporary_as_transaction_error(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "ZK1"
+    transaction = SaveTransaction()
+    transaction.replace(target, b"content")
+    monkeypatch.setattr(transaction, "_prepare", lambda _operations: None)
+
+    with pytest.raises(SaveTransactionError, match="临时文件"):
+        transaction.commit()
