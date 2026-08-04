@@ -8,14 +8,13 @@ from pathlib import Path
 from ..domain.models import Borehole, ProfileFile, ProjectData
 from ..infrastructure.file_writer import (
     build_test_file_lines,
-    encode_text_for_path,
     make_file_text,
     render_h_file,
     render_main_file,
     render_pair_file,
-    text_would_change,
 )
 from ..infrastructure.save_transaction import SaveTransaction
+from ..infrastructure.text_io import encode_text, normalize_text_for_compare, read_text_auto
 from .column_chart_service import column_charts_needing_sync, synchronize_column_charts
 
 
@@ -87,10 +86,12 @@ class SaveService:
         return SaveResult(generated=list(self.generated), profile_count=self.profile_count)
 
     def _replace_text(self, path: Path, content: str, source_path: Path | None = None) -> bool:
-        if not text_would_change(path, content):
+        existing = read_text_auto(path)
+        if normalize_text_for_compare(existing.text) == normalize_text_for_compare(content):
             return False
         encoding_source = source_path if source_path is not None and source_path.exists() else path
-        self.transaction.replace(path, encode_text_for_path(encoding_source, content))
+        source = existing if encoding_source == path else read_text_auto(encoding_source)
+        self.transaction.replace(path, encode_text(content, source.encoding, source.newline))
         return True
 
     def _delete(self, path: Path) -> bool:

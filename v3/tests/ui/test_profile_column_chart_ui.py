@@ -5,7 +5,8 @@ from PySide6.QtWidgets import QInputDialog, QMenu, QMessageBox
 
 import borehole.ui.main_window as main_window_module
 from borehole.application.column_chart_service import synchronize_column_charts
-from borehole.application.project_service import create_empty_project
+from borehole.application.project_service import create_empty_project, create_new_borehole
+from borehole.application.undo_manager import BoreholeSnapshot, UndoAction
 from borehole.domain.models import ProfileFile, ProjectData
 from borehole.ui.main_window import MainWindow
 
@@ -38,6 +39,30 @@ def test_borehole_add_copy_delete_and_rename_resynchronize_charts(qtbot, monkeyp
     window._on_hole_id_changed("ZK1", "NZK3")
     assert window._project.project_files["0yzk"].extra_files["zkt"] == "★"
     assert window._project.project_files["0nzk"].extra_files["zkt"] == "NZK3\n★"
+
+    window._project = create_empty_project()
+    window.close()
+
+
+def test_borehole_rename_migrates_undo_history_across_undo_and_redo(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    borehole = create_new_borehole(window._project, "ZK1")
+    window._load_current_borehole(borehole)
+    manager = window._get_undo_manager(borehole)
+    assert manager is not None
+    before = BoreholeSnapshot.capture(borehole)
+
+    window._on_hole_id_changed("ZK1", "NZK3")
+    after = BoreholeSnapshot.capture(borehole)
+    manager.push(UndoAction(borehole=borehole, label="重命名钻孔", before=before, after=after))
+
+    assert window._undo_managers == {"NZK3": manager}
+    window._undo()
+    assert borehole.prefix == "ZK1"
+    assert window._undo_managers == {"ZK1": manager}
+    window._redo()
+    assert borehole.prefix == "NZK3"
+    assert window._undo_managers == {"NZK3": manager}
 
     window._project = create_empty_project()
     window.close()

@@ -13,7 +13,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..domain.models import EDITABLE_MAIN_INDICES, MAIN_FIELD_NAMES, Borehole
+from ..domain.models import (
+    EDITABLE_MAIN_INDICES,
+    MAIN_FIELD_NAMES,
+    MAIN_INDEX_DEPTH,
+    MAIN_INDEX_ELEVATION,
+    MAIN_INDEX_HOLE_ID,
+    Borehole,
+)
 from .basic_data_page import BasicDataPage
 from .format_utils import format_numeric_value
 
@@ -133,7 +140,7 @@ class MainFilePage(QWidget):
             return
         entry = self._entries[index]
         new_value = entry.text().strip()
-        if index in (1, 2):
+        if index in (MAIN_INDEX_DEPTH, MAIN_INDEX_ELEVATION):
             new_value = format_numeric_value(new_value)
             entry.setText(new_value)
         lines = self._borehole.main.normalized_lines()
@@ -143,26 +150,24 @@ class MainFilePage(QWidget):
             self._edit_index = None
             return
 
-        if index == 0:
+        if index == MAIN_INDEX_HOLE_ID:
             old_prefix = self._borehole.prefix
-            self._borehole.main.lines[0] = new_value
+            self._borehole.main.hole_id = new_value
             self._commit_field_edit()
             self.hole_id_changed.emit(old_prefix, new_value)
         else:
             self._borehole.main.lines[index] = new_value
-            if index == 1:
-                self._borehole.main.lines[12] = new_value
+            if index == MAIN_INDEX_DEPTH:
+                self._borehole.main.set_depth(new_value)
             self._commit_field_edit()
             self.field_changed.emit(index, old_value, new_value)
 
     def set_hole_id(self, value: str) -> None:
         self._loading = True
-        if 0 in self._entries:
-            self._entries[0].setText(value)
+        if MAIN_INDEX_HOLE_ID in self._entries:
+            self._entries[MAIN_INDEX_HOLE_ID].setText(value)
         if self._borehole:
-            lines = self._borehole.main.normalized_lines()
-            lines[0] = value
-            self._borehole.main.lines = lines
+            self._borehole.main.hole_id = value
         self._loading = False
 
     def _sync_depth_from_layers(self) -> None:
@@ -185,14 +190,12 @@ class MainFilePage(QWidget):
         if not max_depth:
             return
         formatted = format_numeric_value(max_depth)
-        lines = self._borehole.main.normalized_lines()
-        if lines[1] == formatted:
+        if self._borehole.main.depth == formatted:
             return
-        old_depth = lines[1]
+        old_depth = self._borehole.main.depth
         self._loading = True
-        self._borehole.main.lines[1] = formatted
-        self._borehole.main.lines[12] = formatted
-        if 1 in self._entries:
-            self._entries[1].setText(formatted)
+        self._borehole.main.set_depth(formatted)
+        if MAIN_INDEX_DEPTH in self._entries:
+            self._entries[MAIN_INDEX_DEPTH].setText(formatted)
         self._loading = False
-        self.field_changed.emit(1, old_depth, formatted)
+        self.field_changed.emit(MAIN_INDEX_DEPTH, old_depth, formatted)

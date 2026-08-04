@@ -29,6 +29,14 @@ class TestMainFileData:
         data.hole_id = "ZK2"
         assert data.lines[0] == "ZK2"
 
+    def test_set_depth_updates_hole_and_casing_depth(self):
+        data = MainFileData(lines=["ZK1", "10"] + [""] * 14)
+
+        data.set_depth("12.5")
+
+        assert data.depth == "12.5"
+        assert data.normalized_lines()[12] == "12.5"
+
     def test_fixed_defaults_filled(self):
         data = MainFileData(lines=["ZK1", "10"] + [""] * 14)
         lines = data.normalized_lines()
@@ -77,12 +85,19 @@ class TestProjectData:
     def test_sorted_boreholes_order(self):
         p = ProjectData()
         p.boreholes["NZK1"] = Borehole(prefix="NZK1", folder=Path("/tmp"), hole_type=HoleType.NZK)
-        p.boreholes["ZK2"] = Borehole(prefix="ZK2", folder=Path("/tmp"), hole_type=HoleType.ZK)
-        p.boreholes["ZK1"] = Borehole(prefix="ZK1", folder=Path("/tmp"), hole_type=HoleType.ZK)
+        for prefix in ("ZK12", "ZK2", "ZK1-2", "ZK10", "ZK1"):
+            p.boreholes[prefix] = Borehole(prefix=prefix, folder=Path("/tmp"), hole_type=HoleType.ZK)
+
         sorted_list = p.sorted_boreholes()
-        assert sorted_list[0].prefix == "ZK1"
-        assert sorted_list[1].prefix == "ZK2"
-        assert sorted_list[2].prefix == "NZK1"
+
+        assert [borehole.prefix for borehole in sorted_list] == [
+            "ZK1",
+            "ZK1-2",
+            "ZK2",
+            "ZK10",
+            "ZK12",
+            "NZK1",
+        ]
 
     def test_dirty_boreholes(self):
         p = ProjectData()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from math import isfinite
 from pathlib import Path
@@ -11,7 +10,17 @@ from typing import Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
-from ..domain.models import BasicLayer, Borehole, ProjectData, TestRecord
+from ..domain.models import (
+    MAIN_INDEX_DEPTH,
+    MAIN_INDEX_ELEVATION,
+    MAIN_INDEX_END_DATE,
+    MAIN_INDEX_HOLE_ID,
+    MAIN_INDEX_START_DATE,
+    BasicLayer,
+    Borehole,
+    ProjectData,
+    TestRecord,
+)
 
 LAYER_TEST_TYPES: dict[str, str] = {
     "o": "取样",
@@ -75,13 +84,6 @@ def _fmt_test_result(suffix: str, value: str) -> str:
     if number is None:
         return value
     return f"{number:.1f}"
-
-
-def _borehole_sort_key(prefix: str) -> tuple[int, str | int]:
-    match = re.search(r"(\d+)$", prefix)
-    if match:
-        return (0, int(match.group(1)))
-    return (1, prefix)
 
 
 def _layer_ranges(borehole: Borehole) -> Iterator[tuple[int, float, float, BasicLayer]]:
@@ -281,11 +283,11 @@ def _write_xlsx(path: Path, rows: list[list[Any]], boreholes: list[Borehole]) ->
     total_depth = 0.0
     for row_idx, borehole in enumerate(boreholes, 2):
         lines = borehole.main.normalized_lines()
-        hole_id = lines[0]
-        elevation_str = lines[2]
-        depth_str = lines[1]
-        start_date = lines[6]
-        end_date = lines[11]
+        hole_id = lines[MAIN_INDEX_HOLE_ID]
+        elevation_str = lines[MAIN_INDEX_ELEVATION]
+        depth_str = lines[MAIN_INDEX_DEPTH]
+        start_date = lines[MAIN_INDEX_START_DATE]
+        end_date = lines[MAIN_INDEX_END_DATE]
 
         depth_number = _to_float(depth_str)
         if depth_number is not None:
@@ -514,11 +516,11 @@ def _write_csv(path: Path, rows: list[list[Any]], boreholes: list[Borehole]) -> 
         total_depth = 0.0
         for borehole in boreholes:
             lines = borehole.main.normalized_lines()
-            hole_id = lines[0]
-            elevation_str = lines[2]
-            depth_str = lines[1]
-            start_date = lines[6]
-            end_date = lines[11]
+            hole_id = lines[MAIN_INDEX_HOLE_ID]
+            elevation_str = lines[MAIN_INDEX_ELEVATION]
+            depth_str = lines[MAIN_INDEX_DEPTH]
+            start_date = lines[MAIN_INDEX_START_DATE]
+            end_date = lines[MAIN_INDEX_END_DATE]
             depth_number = _to_float(depth_str)
             if depth_number is not None:
                 depth_val: float | str = depth_number

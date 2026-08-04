@@ -16,13 +16,13 @@ def test_sync_ignores_project_without_loaded_folder() -> None:
 
 def test_sync_creates_both_column_charts_with_natural_hole_order(tmp_path: Path) -> None:
     project = ProjectData(folder=tmp_path)
-    for prefix in ("ZK10", "NZK2", "ZK2", "NZK1"):
+    for prefix in ("ZK10", "NZK2", "ZK2", "ZK1-2", "ZK1", "NZK1"):
         create_new_borehole(project, prefix)
 
     changed = synchronize_column_charts(project)
 
     assert changed == {"0yzk", "0nzk"}
-    assert project.project_files["0yzk"].extra_files["zkt"] == "ZK2\nZK10\n★"
+    assert project.project_files["0yzk"].extra_files["zkt"] == "ZK1\nZK1-2\nZK2\nZK10\n★"
     assert project.project_files["0nzk"].extra_files["zkt"] == "NZK1\nNZK2\n★"
     assert project.project_files["0yzk"].modified
     assert project.project_files["0nzk"].modified

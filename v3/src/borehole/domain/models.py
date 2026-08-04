@@ -10,8 +10,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .enums import TEST_SUFFIXES_BY_TYPE, HoleType
+from .sorting import borehole_sort_key
 
 END_MARK: str = "★"
+
+MAIN_INDEX_HOLE_ID = 0
+MAIN_INDEX_DEPTH = 1
+MAIN_INDEX_ELEVATION = 2
+MAIN_INDEX_LOCATION = 3
+MAIN_INDEX_AZIMUTH_INCLINATION = 4
+MAIN_INDEX_SCALE = 5
+MAIN_INDEX_START_DATE = 6
+MAIN_INDEX_PROJECT = 7
+MAIN_INDEX_DRAWING_NUMBER = 8
+MAIN_INDEX_STAGE = 9
+MAIN_INDEX_COORDINATES = 10
+MAIN_INDEX_END_DATE = 11
+MAIN_INDEX_CASING_DEPTH = 12
+MAIN_INDEX_DRILLING_ENVIRONMENT = 13
+MAIN_INDEX_ROCK_ATTITUDE = 14
+MAIN_INDEX_DESIGN_UNIT = 15
 
 MAIN_FIELD_NAMES: list[str] = [
     "钻孔编号",
@@ -32,14 +50,25 @@ MAIN_FIELD_NAMES: list[str] = [
     "设计单位全称",
 ]
 
-EDITABLE_MAIN_INDICES: list[int] = [0, 1, 2, 3, 5, 6, 7, 9, 11, 15]
+EDITABLE_MAIN_INDICES: list[int] = [
+    MAIN_INDEX_HOLE_ID,
+    MAIN_INDEX_DEPTH,
+    MAIN_INDEX_ELEVATION,
+    MAIN_INDEX_LOCATION,
+    MAIN_INDEX_SCALE,
+    MAIN_INDEX_START_DATE,
+    MAIN_INDEX_PROJECT,
+    MAIN_INDEX_STAGE,
+    MAIN_INDEX_END_DATE,
+    MAIN_INDEX_DESIGN_UNIT,
+]
 
 FIXED_MAIN_DEFAULTS: dict[int, str] = {
-    4: ",90",
-    8: "001",
-    10: "0,0",
-    13: "L",
-    14: ",90",
+    MAIN_INDEX_AZIMUTH_INCLINATION: ",90",
+    MAIN_INDEX_DRAWING_NUMBER: "001",
+    MAIN_INDEX_COORDINATES: "0,0",
+    MAIN_INDEX_DRILLING_ENVIRONMENT: "L",
+    MAIN_INDEX_ROCK_ATTITUDE: ",90",
 }
 
 
@@ -60,17 +89,23 @@ class MainFileData:
 
     @property
     def hole_id(self) -> str:
-        return self.normalized_lines()[0]
+        return self.normalized_lines()[MAIN_INDEX_HOLE_ID]
 
     @hole_id.setter
     def hole_id(self, value: str) -> None:
         lines = self.normalized_lines()
-        lines[0] = value
+        lines[MAIN_INDEX_HOLE_ID] = value
         self.lines = lines
 
     @property
     def depth(self) -> str:
-        return self.normalized_lines()[1]
+        return self.normalized_lines()[MAIN_INDEX_DEPTH]
+
+    def set_depth(self, value: str) -> None:
+        lines = self.normalized_lines()
+        lines[MAIN_INDEX_DEPTH] = value
+        lines[MAIN_INDEX_CASING_DEPTH] = value
+        self.lines = lines
 
 
 @dataclass
@@ -152,13 +187,7 @@ class ProjectData:
     load_error: str | None = None
 
     def sorted_boreholes(self) -> list[Borehole]:
-        def sort_key(item: Borehole) -> tuple[int, int, str]:
-            type_order = 0 if item.hole_type == HoleType.ZK else 1
-            digits = "".join(ch for ch in item.prefix if ch.isdigit())
-            number = int(digits) if digits else 0
-            return type_order, number, item.prefix
-
-        return sorted(self.boreholes.values(), key=sort_key)
+        return sorted(self.boreholes.values(), key=lambda item: borehole_sort_key(item.prefix))
 
     def dirty_boreholes(self) -> list[Borehole]:
         return [b for b in self.sorted_boreholes() if b.dirty or b.is_new]

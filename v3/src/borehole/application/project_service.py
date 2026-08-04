@@ -125,10 +125,9 @@ def copy_borehole(project: ProjectData, source: Borehole, new_prefix: str) -> Bo
     borehole.raw_texts = {}
     borehole.existing_suffixes = set()
     borehole.tests = {}
-    lines = borehole.main.normalized_lines()
-    lines[0] = new_prefix
-    lines[12] = lines[1]
-    borehole.main = MainFileData(lines=lines)
+    borehole.main = MainFileData(lines=borehole.main.normalized_lines())
+    borehole.main.hole_id = new_prefix
+    borehole.main.set_depth(borehole.main.depth)
     project.boreholes[new_prefix] = borehole
     return borehole
 
@@ -171,14 +170,9 @@ def _find_template_borehole(project: ProjectData, hole_type: HoleType) -> Boreho
 
 
 def _default_main_lines(prefix: str) -> list[str]:
-    lines = [""] * 16
-    lines[0] = prefix
-    lines[4] = ",90"
-    lines[8] = "001"
-    lines[10] = "0,0"
-    lines[13] = "L"
-    lines[14] = ",90"
-    return lines
+    main = MainFileData()
+    main.hole_id = prefix
+    return main.normalized_lines()
 
 
 def create_new_borehole(project: ProjectData, prefix: str) -> Borehole:
@@ -199,10 +193,9 @@ def create_new_borehole(project: ProjectData, prefix: str) -> Borehole:
         borehole.tests = {}
         borehole.deleted_extra_files = set()
         borehole.old_prefix = None
-        lines = borehole.main.normalized_lines()
-        lines[0] = prefix
-        lines[12] = lines[1]
-        borehole.main = MainFileData(lines=lines)
+        borehole.main = MainFileData(lines=borehole.main.normalized_lines())
+        borehole.main.hole_id = prefix
+        borehole.main.set_depth(borehole.main.depth)
     else:
         borehole = Borehole(prefix=prefix, folder=folder, hole_type=hole_type, is_new=True, dirty=True)
         borehole.main = MainFileData(lines=_default_main_lines(prefix))

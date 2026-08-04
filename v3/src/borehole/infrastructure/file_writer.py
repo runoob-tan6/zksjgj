@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
 
-from ..domain.models import END_MARK, Borehole
+from ..domain.models import END_MARK, MAIN_INDEX_CASING_DEPTH, MAIN_INDEX_DEPTH, Borehole
 
 
 def make_file_text(lines: Iterable[str]) -> str:
@@ -13,55 +12,9 @@ def make_file_text(lines: Iterable[str]) -> str:
     return "\n".join([*clean, END_MARK])
 
 
-def read_existing_text(path: Path) -> str | None:
-    text, _ = read_existing_text_with_encoding(path)
-    return text
-
-
-def read_existing_text_with_encoding(path: Path) -> tuple[str | None, str]:
-    if not path.exists():
-        return None, "utf-8"
-    for encoding in ("utf-8", "gbk"):
-        try:
-            return path.read_text(encoding=encoding), encoding
-        except UnicodeDecodeError:
-            continue
-    return path.read_text(encoding="utf-8", errors="replace"), "utf-8"
-
-
-def normalize_for_compare(text: str | None) -> str | None:
-    if text is None:
-        return None
-    return text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
-
-
-def _existing_newline(path: Path) -> str:
-    if not path.exists():
-        return "\r\n"
-    raw = path.read_bytes()
-    if b"\r\n" in raw:
-        return "\r\n"
-    if b"\r" in raw:
-        return "\r"
-    return "\n"
-
-
-def encode_text_for_path(path: Path, text: str) -> bytes:
-    """Encode text using an existing file's encoding and newline convention."""
-    _existing, encoding = read_existing_text_with_encoding(path)
-    newline = _existing_newline(path)
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    return normalized.replace("\n", newline).encode(encoding)
-
-
-def text_would_change(path: Path, text: str) -> bool:
-    existing_text, _encoding = read_existing_text_with_encoding(path)
-    return normalize_for_compare(existing_text) != normalize_for_compare(text)
-
-
 def render_main_file(borehole: Borehole) -> str:
     lines = borehole.main.normalized_lines()
-    lines[12] = lines[1]
+    lines[MAIN_INDEX_CASING_DEPTH] = lines[MAIN_INDEX_DEPTH]
     return make_file_text(lines)
 
 

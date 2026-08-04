@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .enums import WEATHERING_LABELS, HoleType
-from .models import Borehole, ProjectData
+from .models import MAIN_INDEX_DEPTH, MAIN_INDEX_HOLE_ID, Borehole, ProjectData
 
 
 def _pair_depths(raw_text: str) -> list[str]:
@@ -44,16 +44,16 @@ def validate_borehole(borehole: Borehole) -> list[str]:
     messages: list[str] = []
     lines = borehole.main.normalized_lines()
 
-    if not lines[0]:
+    if not lines[MAIN_INDEX_HOLE_ID]:
         messages.append("主文件缺少钻孔编号。")
-    if not lines[1]:
+    if not lines[MAIN_INDEX_DEPTH]:
         messages.append("主文件缺少孔深。")
 
     try:
-        hole_depth = float(lines[1]) if lines[1] else None
+        hole_depth = float(lines[MAIN_INDEX_DEPTH]) if lines[MAIN_INDEX_DEPTH] else None
     except ValueError:
         hole_depth = None
-        messages.append(f"孔深不是有效数字：{lines[1]}")
+        messages.append(f"孔深不是有效数字：{lines[MAIN_INDEX_DEPTH]}")
 
     previous = 0.0
     for index, layer in enumerate(borehole.layers, start=1):

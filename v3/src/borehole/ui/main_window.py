@@ -48,6 +48,7 @@ from ..application.undo_manager import (
 )
 from ..domain.enums import HoleType
 from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData
+from ..domain.sorting import profile_sort_key
 from ..domain.validators import validate_project
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
@@ -64,13 +65,6 @@ class _ChangeToken(TypedDict):
     before: BoreholeSnapshot
 
 
-def _profile_sort_key(name: str) -> tuple[int, str, int, str]:
-    suffix = name[1:]
-    if len(name) > 1 and name[0].upper() in {"H", "Z"} and suffix.isdigit():
-        return 0, name[0].upper(), int(suffix), name.casefold()
-    return 1, "", 0, name.casefold()
-
-
 class MainWindow(QMainWindow):
     """钻孔数据编辑工具主窗口。"""
 
@@ -82,7 +76,7 @@ class MainWindow(QMainWindow):
 
         self._project: ProjectData = create_empty_project()
         self._current_borehole: Borehole | None = None
-        self._undo_managers: dict[int, UndoManager] = {}
+        self._undo_managers: dict[str, UndoManager] = {}
         self._busy = False
         self._refreshing_list = False
         self._syncing = False
@@ -359,7 +353,7 @@ class MainWindow(QMainWindow):
                 profile_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
                 profile_node.setFont(0, bold_font)
                 profile_node.setExpanded(True)
-                for name in sorted(self._project.profile_files, key=_profile_sort_key):
+                for name in sorted(self._project.profile_files, key=profile_sort_key):
                     profile = self._project.profile_files[name]
                     item = QTreeWidgetItem(profile_node, [name])
                     item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
@@ -614,7 +608,7 @@ class MainWindow(QMainWindow):
         borehole = self._project.boreholes.pop(prefix, None)
         if borehole and not borehole.is_new:
             self._project.deleted_boreholes[prefix] = borehole
-        self._undo_managers.pop(id(borehole), None)
+        self._undo_managers.pop(prefix, None)
         next_bh = self._project.sorted_boreholes()[0] if self._project.boreholes else None
         synchronize_column_charts(self._project)
         self._refresh_borehole_list()
@@ -920,6 +914,7 @@ class MainWindow(QMainWindow):
         borehole.prefix = new_prefix
         borehole.hole_type = HoleType.NZK if new_prefix.upper().startswith("NZK") else HoleType.ZK
         self._project.boreholes[new_prefix] = borehole
+        self._migrate_undo_manager(old_prefix, new_prefix)
         self._current_borehole = borehole
         synchronize_column_charts(self._project)
         self._refresh_borehole_list()
@@ -1035,10 +1030,17 @@ class MainWindow(QMainWindow):
     def _get_undo_manager(self, borehole: Borehole | None) -> UndoManager | None:
         if not borehole:
             return None
-        key = id(borehole)
+        key = borehole.prefix
         if key not in self._undo_managers:
             self._undo_managers[key] = UndoManager()
         return self._undo_managers[key]
+
+    def _migrate_undo_manager(self, old_prefix: str, new_prefix: str) -> None:
+        if old_prefix == new_prefix:
+            return
+        manager = self._undo_managers.pop(old_prefix, None)
+        if manager is not None:
+            self._undo_managers[new_prefix] = manager
 
     def _undo(self) -> None:
         manager = self._get_undo_manager(self._current_borehole)
@@ -1085,6 +1087,7 @@ class MainWindow(QMainWindow):
         snapshot.restore(borehole)
         borehole.dirty = True
         self._project.boreholes[borehole.prefix] = borehole
+        self._migrate_undo_manager(old_key, borehole.prefix)
         if not activate:
             return
         self._current_borehole = borehole

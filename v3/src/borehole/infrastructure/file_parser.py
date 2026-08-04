@@ -12,16 +12,13 @@ from ..domain.models import (
     MainFileData,
     TestRecord,
 )
+from .text_io import read_text_auto
 
 
 def read_text_file(path: Path) -> str:
     """读取文本文件，自动检测编码。"""
-    for encoding in ("utf-8", "gbk", "ansi"):
-        try:
-            return path.read_text(encoding=encoding)
-        except UnicodeDecodeError:
-            continue
-    return path.read_text(encoding="utf-8", errors="replace")
+    result = read_text_auto(path)
+    return result.text or ""
 
 
 def clean_lines(text: str) -> list[str]:
