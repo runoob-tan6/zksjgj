@@ -4,6 +4,7 @@ import pytest
 
 from borehole.application.project_service import load_project
 from borehole.application.save_service import SaveService
+from borehole.domain.models import ProfileFile, ProjectData
 from borehole.infrastructure.save_transaction import SaveTransactionError
 
 
@@ -63,3 +64,25 @@ def test_save_service_omits_incomplete_h_description_records(legacy_project: Pat
     content = (legacy_project / "ZK1.-h").read_text(encoding="gbk")
     assert content == "#5.0\n粉质黏土\n★"
     assert "\n\n" not in content
+
+
+def test_save_summary_reports_missing_column_charts_without_mutating_project(tmp_path: Path) -> None:
+    project = ProjectData(folder=tmp_path)
+
+    summary = SaveService(project).summary()
+
+    assert summary.has_changes
+    assert summary.pending_column_charts == ("0yzk", "0nzk")
+    assert project.project_files == {}
+
+
+def test_save_summary_reports_stale_column_chart_without_mutating_it(tmp_path: Path) -> None:
+    chart = ProfileFile(name="0yzk", path=tmp_path / "0yzk", extra_files={"zkt": "错误内容"})
+    project = ProjectData(folder=tmp_path, project_files={"0yzk": chart})
+
+    summary = SaveService(project).summary()
+
+    assert summary.has_changes
+    assert "0yzk" in summary.pending_column_charts
+    assert chart.extra_files == {"zkt": "错误内容"}
+    assert not chart.modified

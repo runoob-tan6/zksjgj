@@ -16,7 +16,7 @@ from ..infrastructure.file_writer import (
     text_would_change,
 )
 from ..infrastructure.save_transaction import SaveTransaction
-from .column_chart_service import synchronize_column_charts
+from .column_chart_service import column_charts_needing_sync, synchronize_column_charts
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +26,7 @@ class SaveSummary:
     dirty_profiles: tuple[ProfileFile, ...]
     deleted_profiles: tuple[str, ...]
     dirty_project_files: tuple[ProfileFile, ...]
+    pending_column_charts: tuple[str, ...]
 
     @property
     def has_changes(self) -> bool:
@@ -36,6 +37,7 @@ class SaveSummary:
                 self.dirty_profiles,
                 self.deleted_profiles,
                 self.dirty_project_files,
+                self.pending_column_charts,
             )
         )
 
@@ -57,7 +59,6 @@ class SaveService:
         self.profile_count = 0
 
     def summary(self) -> SaveSummary:
-        synchronize_column_charts(self.project)
         return self._collect_summary()
 
     def _collect_summary(self) -> SaveSummary:
@@ -69,6 +70,7 @@ class SaveService:
             dirty_project_files=tuple(
                 project_file for project_file in self.project.project_files.values() if project_file.modified
             ),
+            pending_column_charts=column_charts_needing_sync(self.project),
         )
 
     def save(self) -> SaveResult:

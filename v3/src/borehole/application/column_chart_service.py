@@ -17,12 +17,25 @@ def render_column_chart(project: ProjectData, hole_type: HoleType) -> str:
     return "\n".join([*prefixes, END_MARK])
 
 
+def column_charts_needing_sync(project: ProjectData) -> tuple[str, ...]:
+    if project.folder is None:
+        return ()
+    pending: list[str] = []
+    for name, hole_type in COLUMN_CHARTS.items():
+        chart = project.project_files.get(name)
+        expected = render_column_chart(project, hole_type)
+        if chart is None or chart.extra_files.get(COLUMN_CHART_SUFFIX) != expected:
+            pending.append(name)
+    return tuple(pending)
+
+
 def synchronize_column_charts(project: ProjectData) -> set[str]:
     if project.folder is None:
         return set()
     folder = project.folder
     changed: set[str] = set()
-    for name, hole_type in COLUMN_CHARTS.items():
+    for name in column_charts_needing_sync(project):
+        hole_type = COLUMN_CHARTS[name]
         chart = project.project_files.get(name)
         if chart is None:
             chart = ProfileFile(name=name, path=folder / name)
