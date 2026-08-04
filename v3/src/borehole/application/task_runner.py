@@ -34,7 +34,7 @@ class TaskRunner(QObject):
 
     @property
     def running(self) -> bool:
-        return self.worker is not None and self.worker.isRunning()
+        return self.worker is not None
 
     def start(
         self,

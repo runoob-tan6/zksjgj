@@ -6,28 +6,40 @@ from borehole.ui.main_window import MainWindow
 
 
 def test_task_runner_delivers_success_and_releases_thread(qtbot) -> None:
-    runner = TaskRunner()
-    results: list[int] = []
+    for expected in range(10):
+        runner = TaskRunner()
+        results: list[int] = []
 
-    assert runner.start(lambda: 42, results.append, lambda _error: None)
-    qtbot.waitUntil(lambda: not runner.running)
+        assert runner.start(lambda: expected, results.append, lambda _error: None)
+        worker = runner.worker
+        assert worker is not None
+        assert worker.wait(2000)
 
-    assert results == [42]
-    assert runner.worker is None
+        assert runner.running
+        qtbot.waitUntil(lambda: not runner.running)
+
+        assert results == [expected]
+        assert runner.worker is None
 
 
 def test_task_runner_delivers_failure_and_releases_thread(qtbot) -> None:
-    runner = TaskRunner()
-    errors: list[str] = []
+    for attempt in range(10):
+        runner = TaskRunner()
+        errors: list[str] = []
 
-    def fail() -> None:
-        raise RuntimeError("task failed")
+        def fail() -> None:
+            raise RuntimeError(f"task failed {attempt}")
 
-    assert runner.start(fail, lambda _result: None, errors.append)
-    qtbot.waitUntil(lambda: not runner.running)
+        assert runner.start(fail, lambda _result: None, errors.append)
+        worker = runner.worker
+        assert worker is not None
+        assert worker.wait(2000)
 
-    assert errors == ["task failed"]
-    assert runner.worker is None
+        assert runner.running
+        qtbot.waitUntil(lambda: not runner.running)
+
+        assert errors == [f"task failed {attempt}"]
+        assert runner.worker is None
 
 
 def test_task_runner_rejects_overlapping_task(qtbot) -> None:
