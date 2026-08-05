@@ -118,6 +118,10 @@ class MainFilePage(QWidget):
         if self._end_change:
             self._end_change(token)
 
+    def commit_active_edit(self) -> None:
+        """Commit the active main-file field edit before changing context."""
+        self._commit_field_edit()
+
     def load_borehole(self, borehole: Borehole | None) -> None:
         self._loading = True
         self._borehole = borehole

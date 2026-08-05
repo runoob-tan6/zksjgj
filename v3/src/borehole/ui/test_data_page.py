@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from functools import partial
 from typing import Any
 
 from PySide6.QtCore import (
@@ -30,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..domain.enums import SUFFIX_NAMES
-from ..domain.models import Borehole, TestRecord
+from ..domain.models import MAIN_INDEX_END_DATE, Borehole, TestRecord
 from .format_utils import format_numeric_value
 
 COLUMN_TITLES: dict[str, list[str]] = {
@@ -42,6 +44,17 @@ COLUMN_TITLES: dict[str, list[str]] = {
     "q": ["起始深度", "终止深度", "标贯击数"],
     "l": ["稳定水位", "观测日期", "备注"],
 }
+
+NUMERIC_COLUMNS: dict[str, set[int]] = {
+    "e": {0, 1},
+    "f": {0, 1},
+    "m": {0, 1, 2},
+    "n": {0, 1, 2},
+    "o": {0, 1},
+    "q": {0, 1},
+    "l": {0},
+}
+SAMPLE_DEPTH_INTERVAL = 2.0
 
 
 class _TrackingDelegate(QStyledItemDelegate):
@@ -133,10 +146,20 @@ class TestRecordModel(QAbstractTableModel):
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
     def _is_numeric_column(self, col: int) -> bool:
-        title = self._titles[col] if col < len(self._titles) else ""
-        if "击数" in title:
-            return False
-        return any(k in title for k in ("深度", "水位", "值", "率"))
+        return col in NUMERIC_COLUMNS[self._suffix]
+
+    @property
+    def records(self) -> tuple[TestRecord, ...]:
+        return tuple(self._records)
+
+    @contextmanager
+    def suppress_callbacks(self) -> Iterator[None]:
+        previous = self._loading
+        self._loading = True
+        try:
+            yield
+        finally:
+            self._loading = previous
 
     def setData(
         self, index: QModelIndex | QPersistentModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole
@@ -210,7 +233,7 @@ class TestRecordModel(QAbstractTableModel):
         depths = []
         current = first_depth
         while current < self.borehole_depth:
-            current += 2
+            current += SAMPLE_DEPTH_INTERVAL
             if current > self.borehole_depth:
                 current = self.borehole_depth
             depths.append(current)
@@ -253,6 +276,7 @@ class TestSection(QGroupBox):
         self._begin_change = begin_change
         self._end_change = end_change
         self._borehole: Borehole | None = None
+        self._edit_token: Any = None
         self._model = TestRecordModel(suffix, self)
         self._model.before_set_data = self._on_before_edit
         self._model.after_set_data = self._on_after_edit
@@ -291,7 +315,7 @@ class TestSection(QGroupBox):
             if self._suffix not in borehole.tests:
                 borehole.tests[self._suffix] = []
             self._model.load(borehole.tests[self._suffix])
-            self._model.completion_date = borehole.main.normalized_lines()[11]
+            self._model.completion_date = borehole.main.normalized_lines()[MAIN_INDEX_END_DATE]
             try:
                 self._model.borehole_depth = float(borehole.main.depth)
             except ValueError:
@@ -305,13 +329,29 @@ class TestSection(QGroupBox):
         """关闭当前活跃的编辑器，确保数据已提交到模型。"""
         self._delegate.commit_active_edit(self._table)
 
+    def set_depth_changed_callback(self, callback: Callable[[int, str], None]) -> None:
+        self._model.on_depth_changed = callback
+
+    def reload_records(self, records: list[TestRecord]) -> None:
+        self._model.load(records)
+
+    @contextmanager
+    def _change(self, label: str) -> Iterator[None]:
+        token = self._begin_change(self._borehole, label) if self._borehole and self._begin_change else None
+        try:
+            yield
+        finally:
+            self.data_changed.emit(self._suffix)
+            if self._end_change:
+                self._end_change(token)
+
     def _on_before_edit(self) -> None:
         if not self._borehole or not self._begin_change:
             return
         self._edit_token = self._begin_change(self._borehole, f"修改试验数据 .-{self._suffix}")
 
     def _on_after_edit(self) -> None:
-        if hasattr(self, '_edit_token') and self._edit_token and self._end_change:
+        if self._edit_token and self._end_change:
             self._end_change(self._edit_token)
             self._edit_token = None
         self.data_changed.emit(self._suffix)
@@ -319,17 +359,10 @@ class TestSection(QGroupBox):
     def _add(self) -> None:
         if not self._borehole:
             return
-        token = self._begin_change(self._borehole, f"新增试验数据 .-{self._suffix} 行") if self._begin_change else None
-        row = self._model.add_record()
-        # 使用 loading 模式避免自动填充触发额外的撤销记录
-        self._model._loading = True
-        try:
-            self._auto_fill_sample_id(row)
-        finally:
-            self._model._loading = False
-        self.data_changed.emit(self._suffix)
-        if self._end_change:
-            self._end_change(token)
+        with self._change(f"新增试验数据 .-{self._suffix} 行"):
+            row = self._model.add_record()
+            with self._model.suppress_callbacks():
+                self._auto_fill_sample_id(row)
         self._table.setCurrentIndex(self._model.index(row, 0))
 
     def _auto_fill_sample_id(self, row: int) -> None:
@@ -337,7 +370,7 @@ class TestSection(QGroupBox):
             return
         prefix = self._borehole.prefix
         max_num = 0
-        for record in self._model._records:
+        for record in self._model.records:
             if len(record.values) > 2 and record.values[2]:
                 try:
                     num = int(record.values[2].split("-")[-1])
@@ -353,15 +386,8 @@ class TestSection(QGroupBox):
         if not indexes or not self._borehole:
             return
         row = indexes[0].row()
-        token = (
-            self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行")
-            if self._begin_change
-            else None
-        )
-        self._model.remove_record(row)
-        self.data_changed.emit(self._suffix)
-        if self._end_change:
-            self._end_change(token)
+        with self._change(f"删除试验数据 .-{self._suffix} 第{row + 1}行"):
+            self._model.remove_record(row)
 
     def _show_context_menu(self, pos: QPoint) -> None:
         index = self._table.indexAt(pos)
@@ -379,30 +405,16 @@ class TestSection(QGroupBox):
     def _insert_and_select(self, row: int) -> None:
         if not self._borehole:
             return
-        token = (
-            self._begin_change(self._borehole, f"在上方添加试验数据 .-{self._suffix} 行")
-            if self._begin_change
-            else None
-        )
-        inserted = self._model.insert_at(row)
-        self._auto_fill_sample_id(inserted)
-        self.data_changed.emit(self._suffix)
-        if self._end_change:
-            self._end_change(token)
+        with self._change(f"在上方添加试验数据 .-{self._suffix} 行"):
+            inserted = self._model.insert_at(row)
+            self._auto_fill_sample_id(inserted)
         self._table.setCurrentIndex(self._model.index(inserted, 0))
 
     def _delete_row(self, row: int) -> None:
         if not self._borehole:
             return
-        token = (
-            self._begin_change(self._borehole, f"删除试验数据 .-{self._suffix} 第{row + 1}行")
-            if self._begin_change
-            else None
-        )
-        self._model.remove_record(row)
-        self.data_changed.emit(self._suffix)
-        if self._end_change:
-            self._end_change(token)
+        with self._change(f"删除试验数据 .-{self._suffix} 第{row + 1}行"):
+            self._model.remove_record(row)
 
 
 class TestDataPage(QWidget):
@@ -465,7 +477,7 @@ class TestDataPage(QWidget):
             section.load_borehole(borehole)
             section.data_changed.connect(self.data_changed)
             if suffix in ("e", "f"):
-                section._model.on_depth_changed = lambda row, depth, s=suffix: self._sync_ef_depth(s, row, depth)
+                section.set_depth_changed_callback(partial(self._sync_ef_depth, suffix))
             row = index // 2
             col = index % 2
             self._grid_layout.addWidget(section, row, col)
@@ -492,4 +504,4 @@ class TestDataPage(QWidget):
         if target.values[0] != depth:
             target.values[0] = depth
             self.data_changed.emit(target_suffix)
-            target_section._model.load(records)
+            target_section.reload_records(records)

@@ -86,9 +86,13 @@ def validate_borehole(borehole: Borehole) -> list[str]:
         raw_text = borehole.raw_texts.get(f".-{suffix}")
         if not raw_text:
             continue
-        extra_depths = [depth for depth in _pair_depths(raw_text) if depth not in c_depths]
+        pair_depths = _pair_depths(raw_text)
+        extra_depths = [depth for depth in pair_depths if depth not in c_depths]
         if extra_depths:
             messages.append(f".-{suffix} 存在未匹配 .-c 的深度：{', '.join(extra_depths)}")
+        duplicate_depths = _duplicate_values(pair_depths)
+        if duplicate_depths:
+            messages.append(f".-{suffix} 存在重复深度：{', '.join(duplicate_depths)}")
 
     h_raw_text = borehole.raw_texts.get(".-h")
     if h_raw_text:

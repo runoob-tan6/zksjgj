@@ -56,13 +56,13 @@ def test_borehole_rename_migrates_undo_history_across_undo_and_redo(qtbot, monke
     after = BoreholeSnapshot.capture(borehole)
     manager.push(UndoAction(borehole=borehole, label="重命名钻孔", before=before, after=after))
 
-    assert window._undo_managers == {"NZK3": manager}
+    assert window._undo_controller.managers == {"NZK3": manager}
     window._undo()
     assert borehole.prefix == "ZK1"
-    assert window._undo_managers == {"ZK1": manager}
+    assert window._undo_controller.managers == {"ZK1": manager}
     window._redo()
     assert borehole.prefix == "NZK3"
-    assert window._undo_managers == {"NZK3": manager}
+    assert window._undo_controller.managers == {"NZK3": manager}
 
     window._project = create_empty_project()
     window.close()

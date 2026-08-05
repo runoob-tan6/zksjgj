@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..domain.enums import HoleType
 from ..domain.models import BasicLayer, Borehole, TestRecord
 
 
@@ -31,7 +32,7 @@ def copy_tests(tests: dict[str, list[TestRecord]]) -> dict[str, list[TestRecord]
 @dataclass
 class BoreholeSnapshot:
     prefix: str
-    hole_type: str
+    hole_type: HoleType
     main_lines: list[str]
     layers: list[BasicLayer]
     tests: dict[str, list[TestRecord]]
@@ -44,7 +45,7 @@ class BoreholeSnapshot:
     def capture(cls, borehole: Borehole) -> BoreholeSnapshot:
         return cls(
             prefix=borehole.prefix,
-            hole_type=borehole.hole_type.value,
+            hole_type=borehole.hole_type,
             main_lines=list(borehole.main.normalized_lines()),
             layers=copy_layers(borehole.layers),
             tests=copy_tests(borehole.tests),
@@ -64,10 +65,8 @@ class BoreholeSnapshot:
         )
 
     def restore(self, borehole: Borehole) -> None:
-        from ..domain.enums import HoleType
-
         borehole.prefix = self.prefix
-        borehole.hole_type = HoleType(self.hole_type)
+        borehole.hole_type = self.hole_type
         borehole.main.lines = list(self.main_lines)
         borehole.layers = copy_layers(self.layers)
         borehole.tests = copy_tests(self.tests)

@@ -86,3 +86,11 @@ class TestValidateBorehole:
 
         assert any("孔深" in message for message in msgs)
         assert b.validation_messages == ["existing"]
+
+    def test_pair_file_duplicate_depth_is_reported(self):
+        b = _make_borehole(layers=[BasicLayer(bottom_depth="10", lithology_code="A")])
+        b.raw_texts[".-b"] = "10,Q4\n10,K\n★"
+
+        msgs = validate_borehole(b)
+
+        assert ".-b 存在重复深度：10" in msgs

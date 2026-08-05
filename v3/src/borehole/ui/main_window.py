@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..application.column_chart_service import synchronize_column_charts
+from ..application.project_file_operations import ProjectFileOperations
 from ..application.project_service import (
     copy_borehole,
     create_empty_project,
@@ -49,15 +51,16 @@ from ..application.undo_manager import (
 )
 from ..domain.enums import HoleType
 from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData
-from ..domain.sorting import profile_sort_key
 from ..domain.validators import validate_project
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
 from ..infrastructure.xlsx_export import export_layer_test_summary
 from .info_pages import EditableTextPage, RawTextPage, ValidationPage
 from .main_file_page import MainFilePage
+from .project_tree_controller import ProjectTreeController
 from .spt_analysis_page import SPTAnalysisPage
 from .test_data_page import TestDataPage
+from .undo_controller import UndoController
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +82,7 @@ class MainWindow(QMainWindow):
 
         self._project: ProjectData = create_empty_project()
         self._current_borehole: Borehole | None = None
-        self._undo_managers: dict[str, UndoManager] = {}
+        self._undo_controller = UndoController()
         self._busy = False
         self._refreshing_list = False
         self._syncing = False
@@ -165,6 +168,7 @@ class MainWindow(QMainWindow):
         self._tree.customContextMenuRequested.connect(self._show_context_menu)
         self._tree.currentItemChanged.connect(self._on_borehole_selected)
         left_layout.addWidget(self._tree)
+        self._tree_controller = ProjectTreeController(self._tree)
 
         splitter.addWidget(left_panel)
 
@@ -295,7 +299,7 @@ class MainWindow(QMainWindow):
             self._set_empty_project(project.load_error)
             return
         self._project = project
-        self._undo_managers.clear()
+        self._undo_controller.clear()
         self._current_borehole = None
         save_last_project(folder)
         self._refresh_borehole_list()
@@ -309,7 +313,7 @@ class MainWindow(QMainWindow):
     def _set_empty_project(self, message: str) -> None:
         self._project = create_empty_project()
         self._current_borehole = None
-        self._undo_managers.clear()
+        self._undo_controller.clear()
         self._status_label.setText(message)
         self._refresh_borehole_list()
         self._load_current_borehole(None)
@@ -318,96 +322,14 @@ class MainWindow(QMainWindow):
     # ── 钻孔列表 ────────────────────────────────────────────────────
 
     def _refresh_borehole_list(self) -> None:
-        # 保存当前树中实际选中的项目（可能是钻孔、剖面文件或配置文件）
-        current_item = self._tree.currentItem()
-        current_prefix = None
-        if current_item:
-            current_prefix = current_item.data(0, Qt.ItemDataRole.UserRole)
-        if not current_prefix and self._current_borehole:
-            current_prefix = self._current_borehole.prefix
         self._refreshing_list = True
         try:
-            self._tree.clear()
-            bold_font = self._tree.font()
-            bold_font.setBold(True)
-
-            zk_node = QTreeWidgetItem(self._tree, ["岩钻孔 ZK"])
-            zk_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-            zk_node.setFont(0, bold_font)
-            zk_node.setExpanded(True)
-            nzk_node = QTreeWidgetItem(self._tree, ["土钻孔 NZK"])
-            nzk_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-            nzk_node.setFont(0, bold_font)
-            nzk_node.setExpanded(True)
-
-            for borehole in self._project.sorted_boreholes():
-                parent = nzk_node if borehole.hole_type == HoleType.NZK else zk_node
-                bh_item = QTreeWidgetItem(parent, [borehole.display_name()])
-                bh_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                bh_item.setData(0, Qt.ItemDataRole.UserRole, borehole.prefix)
-                # 额外数据文件
-                for suffix in sorted(borehole.extra_files.keys()):
-                    ext_item = QTreeWidgetItem(bh_item, [f".-{suffix}"])
-                    ext_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                    ext_item.setData(0, Qt.ItemDataRole.UserRole, f"extra:{borehole.prefix}:{suffix}")
-
-            # 剖面图
-            if self._project.profile_files:
-                profile_node = QTreeWidgetItem(self._tree, ["剖面图"])
-                profile_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                profile_node.setFont(0, bold_font)
-                profile_node.setExpanded(True)
-                for name in sorted(self._project.profile_files, key=profile_sort_key):
-                    profile = self._project.profile_files[name]
-                    item = QTreeWidgetItem(profile_node, [name])
-                    item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                    item.setData(0, Qt.ItemDataRole.UserRole, f"profile:{name}")
-                    # 剖面文件的附属数据文件
-                    for suffix in sorted(profile.extra_files.keys()):
-                        ext_item = QTreeWidgetItem(item, [f".-{suffix}"])
-                        ext_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                        ext_item.setData(0, Qt.ItemDataRole.UserRole, f"profile_extra:{name}:{suffix}")
-
-            # 柱状图（0nzk.-zkt、0yzk.-zkt 等）
-            if self._project.project_files:
-                proj_node = QTreeWidgetItem(self._tree, ["柱状图"])
-                proj_node.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                proj_node.setFont(0, bold_font)
-                proj_node.setExpanded(True)
-                for name in sorted(self._project.project_files.keys()):
-                    pf = self._project.project_files[name]
-                    for suffix in sorted(pf.extra_files.keys()):
-                        ext_item = QTreeWidgetItem(proj_node, [f"{name}.-{suffix}"])
-                        ext_item.setTextAlignment(0, Qt.AlignmentFlag.AlignCenter)
-                        ext_item.setData(0, Qt.ItemDataRole.UserRole, f"project_file:{name}:{suffix}")
-
-            if current_prefix:
-                self._select_in_tree(current_prefix)
+            self._tree_controller.refresh(self._project, self._current_borehole)
         finally:
             self._refreshing_list = False
 
     def _select_in_tree(self, prefix: str) -> None:
-        for i in range(self._tree.topLevelItemCount()):
-            parent = self._tree.topLevelItem(i)
-            if parent is None:
-                continue
-            for j in range(parent.childCount()):
-                child = parent.child(j)
-                if child is None:
-                    continue
-                if child.data(0, Qt.ItemDataRole.UserRole) == prefix:
-                    self._tree.setCurrentItem(child)
-                    self._tree.scrollToItem(child)
-                    return
-                # 搜索子节点
-                for k in range(child.childCount()):
-                    sub = child.child(k)
-                    if sub is None:
-                        continue
-                    if sub.data(0, Qt.ItemDataRole.UserRole) == prefix:
-                        self._tree.setCurrentItem(sub)
-                        self._tree.scrollToItem(sub)
-                        return
+        self._tree_controller.select(prefix)
 
     def _on_borehole_selected(
         self, current: QTreeWidgetItem | None, _previous: QTreeWidgetItem | None
@@ -462,7 +384,7 @@ class MainWindow(QMainWindow):
                 self._extra_text_page.set_content(
                     f"{file_name}.-{suffix}",
                     pf.extra_files[suffix],
-                    on_save=self._on_project_file_changed,
+                    on_save=self._on_profile_extra_changed,
                 )
                 self._tabs.setCurrentWidget(self._extra_text_page)
             return
@@ -493,7 +415,7 @@ class MainWindow(QMainWindow):
 
     def _flush_active_editors(self) -> None:
         """提交所有活跃的编辑，防止切换钻孔时丢失数据。"""
-        self._main_file_page._commit_field_edit()
+        self._main_file_page.commit_active_edit()
         self._test_data_page.commit_active_edit()
 
     def _show_context_menu(self, pos: QPoint) -> None:
@@ -555,8 +477,6 @@ class MainWindow(QMainWindow):
         if not self._project.folder:
             QMessageBox.information(self, "提示", "请先选择项目文件夹。")
             return
-        from PySide6.QtWidgets import QInputDialog
-
         prefix, ok = QInputDialog.getText(self, "新增钻孔", "请输入钻孔编号，例如 ZK8 或 NZK13：")
         if not ok or not prefix.strip():
             return
@@ -580,8 +500,6 @@ class MainWindow(QMainWindow):
             return
         source = self._current_borehole
         default_prefix = next_borehole_prefix(self._project, source.prefix)
-        from PySide6.QtWidgets import QInputDialog
-
         new_prefix, ok = QInputDialog.getText(self, "复制钻孔", "请输入新钻孔编号：", text=default_prefix)
         if not ok or not new_prefix.strip():
             return
@@ -612,7 +530,7 @@ class MainWindow(QMainWindow):
         borehole = self._project.boreholes.pop(prefix, None)
         if borehole and not borehole.is_new:
             self._project.deleted_boreholes[prefix] = borehole
-        self._undo_managers.pop(prefix, None)
+        self._undo_controller.remove(prefix)
         next_bh = self._project.sorted_boreholes()[0] if self._project.boreholes else None
         synchronize_column_charts(self._project)
         self._refresh_borehole_list()
@@ -628,8 +546,6 @@ class MainWindow(QMainWindow):
             return
         # 生成默认新名称（H1 → H2 等）
         default_name = next_profile_name(self._project, name[0])
-        from PySide6.QtWidgets import QInputDialog
-
         new_name, ok = QInputDialog.getText(
             self, "复制剖面文件", "请输入新文件名（格式如 H3 或 Z1）：", text=default_name
         )
@@ -642,16 +558,7 @@ class MainWindow(QMainWindow):
         if new_name in self._project.profile_files:
             QMessageBox.warning(self, "提示", f"剖面文件 {new_name} 已存在。")
             return
-        # 深拷贝剖面文件
-        folder = self._project.folder or Path.cwd()
-        new_profile = ProfileFile(
-            name=new_name,
-            path=folder / new_name,
-            content=profile.content,
-            extra_files=dict(profile.extra_files),
-            modified=True,
-        )
-        self._project.profile_files[new_name] = new_profile
+        ProjectFileOperations(self._project).copy_profile(name, new_name)
         self._refresh_borehole_list()
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已复制剖面文件 {name} → {new_name}。")
@@ -661,8 +568,6 @@ class MainWindow(QMainWindow):
         if not profile:
             return
         self._flush_active_editors()
-        from PySide6.QtWidgets import QInputDialog
-
         new_name, ok = QInputDialog.getText(
             self, "重命名剖面文件", "请输入新文件名（格式如 H3 或 Z1）：", text=name
         )
@@ -689,13 +594,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", f"目标文件已存在：{conflict.name}")
             return
 
-        if profile.old_name is None:
-            profile.old_name = name
-        del self._project.profile_files[name]
-        profile.name = new_name
-        profile.path = folder / new_name
-        profile.modified = True
-        self._project.profile_files[new_name] = profile
+        ProjectFileOperations(self._project).rename_profile(name, new_name)
         self._refresh_borehole_list()
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已重命名剖面文件 {name} → {new_name}。")
@@ -705,8 +604,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "提示", "请先选择项目文件夹。")
             return
         default_name = next_profile_name(self._project)
-        from PySide6.QtWidgets import QInputDialog
-
         new_name, ok = QInputDialog.getText(
             self, "新增剖面文件", "请输入文件名（格式如 H3 或 Z1）：", text=default_name
         )
@@ -719,14 +616,7 @@ class MainWindow(QMainWindow):
         if new_name in self._project.profile_files:
             QMessageBox.warning(self, "提示", f"剖面文件 {new_name} 已存在。")
             return
-        folder = self._project.folder
-        new_profile = ProfileFile(
-            name=new_name,
-            path=folder / new_name,
-            content="",
-            modified=True,
-        )
-        self._project.profile_files[new_name] = new_profile
+        ProjectFileOperations(self._project).create_profile(new_name)
         self._refresh_borehole_list()
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已新增剖面文件 {new_name}。")
@@ -740,8 +630,7 @@ class MainWindow(QMainWindow):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        self._project.deleted_profiles[name] = profile
-        del self._project.profile_files[name]
+        ProjectFileOperations(self._project).delete_profile(name)
         self._current_extra_profile = None
         self._current_extra_suffix = None
         self._refresh_borehole_list()
@@ -769,8 +658,6 @@ class MainWindow(QMainWindow):
         if not self._project.folder:
             QMessageBox.information(self, "提示", "请先选择项目文件夹。")
             return
-        from PySide6.QtWidgets import QInputDialog
-
         name, ok = QInputDialog.getText(self, "新增柱状图文件", "请输入文件名前缀（如 0nzk、0yzk）：")
         if not ok or not name.strip():
             return
@@ -836,8 +723,6 @@ class MainWindow(QMainWindow):
         borehole = self._project.boreholes.get(bh_prefix)
         if not borehole:
             return
-        from PySide6.QtWidgets import QInputDialog
-
         suffix, ok = QInputDialog.getText(self, "新增附属文件", "请输入文件后缀（如 zkt、d0）：")
         if not ok or not suffix.strip():
             return
@@ -875,25 +760,27 @@ class MainWindow(QMainWindow):
             self._status_label.setText(f"{prefix}.-{self._current_extra_suffix} 已修改。")
         self._update_undo_controls()
 
-    def _on_profile_extra_changed(self, name: str, content: str) -> None:
-        if self._current_extra_profile and self._current_extra_suffix:
-            self._current_extra_profile.extra_files[self._current_extra_suffix] = content
-            self._current_extra_profile.modified = True
-            profile_name = self._current_extra_profile.name
-            self._status_label.setText(f"{profile_name}.-{self._current_extra_suffix} 已修改。")
+    def _update_current_profile_text(self, content: str, *, main_file: bool) -> None:
+        profile = self._current_extra_profile
+        if profile is None:
+            return
+        if main_file:
+            profile.content = content
+            display_name = profile.name
+        else:
+            suffix = self._current_extra_suffix
+            if suffix is None:
+                return
+            profile.extra_files[suffix] = content
+            display_name = f"{profile.name}.-{suffix}"
+        profile.modified = True
+        self._status_label.setText(f"{display_name} 已修改。")
 
-    def _on_profile_main_changed(self, name: str, content: str) -> None:
-        if self._current_extra_profile:
-            self._current_extra_profile.content = content
-            self._current_extra_profile.modified = True
-            self._status_label.setText(f"{self._current_extra_profile.name} 已修改。")
+    def _on_profile_extra_changed(self, _name: str, content: str) -> None:
+        self._update_current_profile_text(content, main_file=False)
 
-    def _on_project_file_changed(self, name: str, content: str) -> None:
-        if self._current_extra_profile and self._current_extra_suffix:
-            self._current_extra_profile.extra_files[self._current_extra_suffix] = content
-            self._current_extra_profile.modified = True
-            file_name = self._current_extra_profile.name
-            self._status_label.setText(f"{file_name}.-{self._current_extra_suffix} 已修改。")
+    def _on_profile_main_changed(self, _name: str, content: str) -> None:
+        self._update_current_profile_text(content, main_file=True)
 
     # ── Dirty 标记 ──────────────────────────────────────────────────
 
@@ -937,8 +824,7 @@ class MainWindow(QMainWindow):
             self._current_borehole.mark_dirty(suffix)
             self._update_summary()
             prefix = self._current_borehole.prefix
-            self._refresh_borehole_list()
-            self._select_in_tree(prefix)
+            self._tree_controller.update_borehole_label(prefix, self._current_borehole.display_name())
             self._status_label.setText(f"{prefix} 已修改。")
 
     def _sync_description(
@@ -1032,19 +918,10 @@ class MainWindow(QMainWindow):
         self._update_undo_controls()
 
     def _get_undo_manager(self, borehole: Borehole | None) -> UndoManager | None:
-        if not borehole:
-            return None
-        key = borehole.prefix
-        if key not in self._undo_managers:
-            self._undo_managers[key] = UndoManager()
-        return self._undo_managers[key]
+        return self._undo_controller.get(borehole)
 
     def _migrate_undo_manager(self, old_prefix: str, new_prefix: str) -> None:
-        if old_prefix == new_prefix:
-            return
-        manager = self._undo_managers.pop(old_prefix, None)
-        if manager is not None:
-            self._undo_managers[new_prefix] = manager
+        self._undo_controller.migrate(old_prefix, new_prefix)
 
     def _undo(self) -> None:
         manager = self._get_undo_manager(self._current_borehole)
@@ -1142,7 +1019,7 @@ class MainWindow(QMainWindow):
     def _finish_save(self, result: tuple[list[Path], int]) -> None:
         generated, profile_count = result
         self._set_busy(False)
-        self._undo_managers.clear()
+        self._undo_controller.clear()
         # 保存前记录当前编辑状态（_refresh_borehole_list 内部的 _on_borehole_selected 会清除这些状态）
         saved_extra_profile = self._current_extra_profile
         saved_extra_suffix = self._current_extra_suffix

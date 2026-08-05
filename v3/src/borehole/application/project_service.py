@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from ..domain.enums import KNOWN_SUFFIXES, HoleType
-from ..domain.models import Borehole, MainFileData, ProjectData
+from ..domain.models import Borehole, MainFileData, ProfileFile, ProjectData
 from ..infrastructure.file_parser import parse_borehole, read_text_file
 from .column_chart_service import synchronize_column_charts
 
@@ -80,7 +80,6 @@ def load_project(folder: Path) -> ProjectData:
         groups.setdefault(borehole_prefix, {})[borehole_suffix] = path
 
     # 加载项目级文件
-    from ..domain.models import ProfileFile
     for prefix, files in project_groups.items():
         pf = ProfileFile(name=prefix, path=files.get("main", folder / prefix))
         for suffix, path in files.items():

@@ -96,9 +96,7 @@ def _layer_ranges(borehole: Borehole) -> Iterator[tuple[int, float, float, Basic
         top = bottom
 
 
-def _test_matches_layer(
-    suffix: str, test_top: float, test_bottom: float, layer_top: float, layer_bottom: float
-) -> bool:
+def _test_matches_layer(test_top: float, layer_top: float, layer_bottom: float) -> bool:
     return layer_top <= test_top < layer_bottom
 
 
@@ -128,7 +126,7 @@ def _layer_test_rows(boreholes: list[Borehole]) -> list[list[Any]]:
                     continue
                 result_value = values[2]
                 for layer_index, layer_top, layer_bottom, layer in ranges:
-                    if not _test_matches_layer(suffix, test_top, test_bottom, layer_top, layer_bottom):
+                    if not _test_matches_layer(test_top, layer_top, layer_bottom):
                         continue
                     formation = _effective_layer_formation(borehole, layer_index, layer)
                     rows.append([

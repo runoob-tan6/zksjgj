@@ -51,3 +51,23 @@ def test_pending_profile_deletion_is_unsaved_change(qtbot, monkeypatch, tmp_path
 
     window._project = ProjectData()
     window.close()
+
+
+def test_mark_dirty_updates_current_tree_item_without_rebuilding_tree(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch)
+    borehole = Borehole("ZK1", tmp_path, HoleType.ZK, main=MainFileData(["ZK1", "10"]))
+    window._project = ProjectData(folder=tmp_path, boreholes={"ZK1": borehole})
+    window._current_borehole = borehole
+    window._refresh_borehole_list()
+    window._select_in_tree("ZK1")
+    rebuilds: list[bool] = []
+    monkeypatch.setattr(window, "_refresh_borehole_list", lambda: rebuilds.append(True))
+
+    try:
+        window._mark_dirty("main")
+
+        assert rebuilds == []
+        assert window._tree.currentItem().text(0) == "*ZK1"
+    finally:
+        window._project = ProjectData()
+        window.close()
