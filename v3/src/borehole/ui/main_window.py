@@ -231,7 +231,14 @@ class MainWindow(QMainWindow):
     def _choose_project(self) -> None:
         if self._busy:
             return
-        folder = QFileDialog.getExistingDirectory(self, "选择钻孔项目文件夹")
+        initial_folder = self._project.folder
+        if not initial_folder:
+            last_project = load_last_project()
+            if last_project and last_project.exists():
+                initial_folder = last_project
+        if not initial_folder:
+            initial_folder = Path.home()
+        folder = QFileDialog.getExistingDirectory(self, "选择钻孔项目文件夹", str(initial_folder))
         if folder:
             self._load_project_path(Path(folder))
 

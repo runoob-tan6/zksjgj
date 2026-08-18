@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -21,6 +23,20 @@ from .format_utils import format_numeric_value
 
 COLUMNS = ["层号", "层底深度 .-c", "岩性代号 .-c", "地层时代 .-b", "钻孔结构 .-d", "风化 .-g", "岩性描述 .-h"]
 ATTR_MAP = ["", "bottom_depth", "lithology_code", "formation", "structure", "weathering", "description"]
+
+
+class BasicDataItemDelegate(QStyledItemDelegate):
+    """Keep the inline editor tall enough for the application's input padding."""
+
+    def updateEditorGeometry(
+        self,
+        editor: QWidget,
+        option: QStyleOptionViewItem,
+        _index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
+        # The default delegate applies QTableView::item padding to the editor
+        # geometry as well, leaving too little vertical room for Chinese glyphs.
+        editor.setGeometry(option.rect)
 
 
 class BasicLayerModel(QAbstractTableModel):
@@ -169,6 +185,7 @@ class BasicDataPage(QWidget):
 
         self._table = QTableView()
         self._table.setModel(self._model)
+        self._table.setItemDelegate(BasicDataItemDelegate(self._table))
         self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(True)
