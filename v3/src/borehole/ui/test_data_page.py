@@ -55,6 +55,8 @@ NUMERIC_COLUMNS: dict[str, set[int]] = {
     "l": {0},
 }
 SAMPLE_DEPTH_INTERVAL = 2.0
+VISIBLE_TEST_ROWS = 8
+MIN_TEST_TABLE_HEIGHT = 300
 
 
 class _TrackingDelegate(QStyledItemDelegate):
@@ -302,9 +304,12 @@ class TestSection(QGroupBox):
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._show_context_menu)
-        self._table.setMinimumHeight(280)
         self._delegate = _TrackingDelegate(self._table)
         self._table.setItemDelegate(self._delegate)
+        # Keep the first eight rows fully visible.  The global header/item
+        # padding is applied by the style at polish time and is not reflected
+        # reliably by QHeaderView.sizeHint(), so leave a fixed safety margin.
+        self._table.setMinimumHeight(MIN_TEST_TABLE_HEIGHT)
         layout.addWidget(self._table, 1)
 
     def load_borehole(self, borehole: Borehole | None) -> None:
