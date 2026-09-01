@@ -14,6 +14,7 @@ icon_path = project_dir / "assets" / "app_icon.ico"
 # PyInstaller may otherwise deduplicate them under shiboken6, where the
 # Windows DLL loader cannot find them when QtCore is imported.
 pyside6_dir = Path(__import__("PySide6").__file__).parent
+shiboken6_dir = Path(__import__("shiboken6").__file__).parent
 qt_runtime_dlls = [
     (str(pyside6_dir / name), "PySide6")
     for name in (
@@ -25,6 +26,11 @@ qt_runtime_dlls = [
         "vcruntime140_1.dll",
     )
     if (pyside6_dir / name).exists()
+]
+shiboken_runtime_dlls = [
+    (str(shiboken6_dir / name), "PySide6")
+    for name in ("shiboken6.abi3.dll",)
+    if (shiboken6_dir / name).exists()
 ]
 
 # Qt6Core dynamically loads ICU on Windows.  The Python distribution used to
@@ -119,7 +125,7 @@ excludes = [
 a = Analysis(
     [str(project_dir / "run.py")],
     pathex=[str(src_dir)],
-    binaries=qt_runtime_dlls + icu_runtime_dlls,
+    binaries=qt_runtime_dlls + shiboken_runtime_dlls + icu_runtime_dlls,
     datas=datas,
     hiddenimports=openpyxl_imports + borehole_imports,
     hookspath=[],
