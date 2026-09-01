@@ -1,11 +1,50 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import os
+import shutil
 from PyInstaller.utils.hooks import collect_submodules
 
 project_dir = Path(SPECPATH)
 src_dir = project_dir / "src"
 icon_path = project_dir / "assets" / "app_icon.ico"
+
+# Qt6Core.dll is loaded by PySide6.QtCore.pyd from the PySide6 directory.
+# Keep the MSVC runtime DLLs beside the Qt binaries in the one-file bundle;
+# PyInstaller may otherwise deduplicate them under shiboken6, where the
+# Windows DLL loader cannot find them when QtCore is imported.
+pyside6_dir = Path(__import__("PySide6").__file__).parent
+qt_runtime_dlls = [
+    (str(pyside6_dir / name), "PySide6")
+    for name in (
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "msvcp140_codecvt_ids.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+    )
+    if (pyside6_dir / name).exists()
+]
+
+# Qt6Core dynamically loads ICU on Windows.  The Python distribution used to
+# build this application does not ship ICU itself, so include the available
+# ICU runtime DLLs in the bundle when present (for example from the bundled
+# Poppler runtime used by the workspace).
+icu_runtime_dlls = []
+icu_dirs = [
+    Path(os.environ.get("QT_ICU_DIR", "")),
+    Path(shutil.which("icuuc.dll") or "").parent,
+    Path(r"C:\Users\admin\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\poppler\Library\bin"),
+]
+for icu_dir in icu_dirs:
+    if icu_dir.is_dir():
+        icu_runtime_dlls.extend(
+            (str(path), "PySide6")
+            for path in icu_dir.glob("icu*.dll")
+        )
+        if icu_runtime_dlls:
+            break
 
 # 打包图标文件到 exe 内部
 datas = [
@@ -80,7 +119,7 @@ excludes = [
 a = Analysis(
     [str(project_dir / "run.py")],
     pathex=[str(src_dir)],
-    binaries=[],
+    binaries=qt_runtime_dlls + icu_runtime_dlls,
     datas=datas,
     hiddenimports=openpyxl_imports + borehole_imports,
     hookspath=[],
