@@ -119,6 +119,26 @@ def test_tree_uses_profile_and_column_chart_group_labels(qtbot, monkeypatch, tmp
     window.close()
 
 
+def test_selecting_current_borehole_after_profile_returns_to_basic_info(
+    qtbot, monkeypatch, tmp_path: Path
+) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    borehole = create_new_borehole(window._project, "ZK1")
+    window._project.profile_files = {
+        "H1": ProfileFile(name="H1", path=tmp_path / "H1", content="profile")
+    }
+    window._refresh_borehole_list()
+    window._load_current_borehole(borehole)
+    window._select_in_tree("profile:H1")
+    assert window._tabs.currentWidget() is window._extra_text_page
+
+    window._select_in_tree("ZK1")
+
+    assert window._tabs.currentWidget() is window._main_file_page
+    window._project = create_empty_project()
+    window.close()
+
+
 def test_profile_context_menu_includes_rename_command(qtbot, monkeypatch, tmp_path: Path) -> None:
     window = _window(qtbot, monkeypatch, tmp_path)
     window._project = _project_with_profile(tmp_path)

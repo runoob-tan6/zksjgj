@@ -57,6 +57,8 @@ NUMERIC_COLUMNS: dict[str, set[int]] = {
 SAMPLE_DEPTH_INTERVAL = 2.0
 VISIBLE_TEST_ROWS = 8
 MIN_TEST_TABLE_HEIGHT = 300
+MIN_TEST_SECTION_HEIGHT = 370
+MIN_CORE_SECTION_HEIGHT = 430
 
 
 class _TrackingDelegate(QStyledItemDelegate):
@@ -273,7 +275,11 @@ class TestSection(QGroupBox):
     ) -> None:
         title = f".-{suffix} {SUFFIX_NAMES.get(suffix, '')}"
         super().__init__(title, parent)
-        self.setMinimumHeight(340)
+        # The table's minimum height includes its header and viewport.  Leave
+        # extra room for the core-recovery/RQD sections so their eighth row is
+        # not visually clipped when a ninth record is present.
+        section_height = MIN_CORE_SECTION_HEIGHT if suffix in ("e", "f") else MIN_TEST_SECTION_HEIGHT
+        self.setMinimumHeight(section_height)
         self._suffix = suffix
         self._begin_change = begin_change
         self._end_change = end_change

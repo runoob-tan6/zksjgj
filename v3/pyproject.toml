@@ -4,13 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "borehole-editor-v3"
-version = "3.0.0"
+version = "3.1.0"
 description = "钻孔数据编辑工具 v3 - 兼容 v2 的稳定性与性能优化版本"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dependencies = [
-    "PySide6>=6.6.0",
+    # PySide6 6.10+ QtCore requires an external ICU runtime on Windows.
+    # 6.9.x is self-contained and avoids machine-dependent ICU DLL loading.
+    "PySide6>=6.9.0,<6.10.0",
     "openpyxl>=3.1.0",
 ]
 

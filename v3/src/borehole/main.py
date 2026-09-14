@@ -50,7 +50,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("钻孔数据编辑工具")
-    app.setApplicationVersion("3.0.0")
+    app.setApplicationVersion("3.1.0")
 
     icon_path = _get_icon_path()
     if icon_path:

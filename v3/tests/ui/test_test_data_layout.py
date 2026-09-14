@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication
 from borehole.domain.enums import HoleType
 from borehole.domain.models import Borehole, MainFileData
 from borehole.domain.models import TestRecord as Record
-from borehole.ui.test_data_page import VISIBLE_TEST_ROWS
+from borehole.ui.test_data_page import MIN_CORE_SECTION_HEIGHT, VISIBLE_TEST_ROWS
 from borehole.ui.test_data_page import TestSection as Section
 
 
@@ -37,5 +37,7 @@ def test_core_recovery_and_rqd_tables_show_eight_complete_rows(qtbot) -> None:
             app.processEvents()
             table = section._table
             assert table.viewport().height() >= VISIBLE_TEST_ROWS * table.rowHeight(0)
+            assert section.height() >= MIN_CORE_SECTION_HEIGHT
+            assert table.geometry().bottom() <= section.rect().bottom()
     finally:
         app.setStyleSheet(original_style_sheet)

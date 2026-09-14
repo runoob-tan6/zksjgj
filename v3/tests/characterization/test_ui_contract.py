@@ -31,7 +31,7 @@ def _menu_contract(window: QMainWindow) -> list[tuple[str, list[tuple[str, str]]
 
 
 def test_main_window_preserves_v2_navigation(window: MainWindow) -> None:
-    assert window.windowTitle() == "钻孔数据编辑工具 v3"
+    assert window.windowTitle() == "钻孔数据编辑工具 v3.1"
     assert (window.minimumWidth(), window.minimumHeight()) == (980, 640)
     assert (window.width(), window.height()) == (1180, 760)
     assert window.acceptDrops()

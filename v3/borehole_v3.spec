@@ -1,8 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
-import os
-import shutil
 from PyInstaller.utils.hooks import collect_submodules
 
 project_dir = Path(SPECPATH)
@@ -13,7 +11,14 @@ icon_path = project_dir / "assets" / "app_icon.ico"
 # Keep the MSVC runtime DLLs beside the Qt binaries in the one-file bundle;
 # PyInstaller may otherwise deduplicate them under shiboken6, where the
 # Windows DLL loader cannot find them when QtCore is imported.
-pyside6_dir = Path(__import__("PySide6").__file__).parent
+pyside6 = __import__("PySide6")
+pyside6_version = tuple(int(part) for part in pyside6.__version__.split(".")[:2])
+if not (6, 9) <= pyside6_version < (6, 10):
+    raise SystemExit(
+        "PySide6 6.9.x is required for the Windows package; "
+        f"found {pyside6.__version__}. Install the version pinned in pyproject.toml."
+    )
+pyside6_dir = Path(pyside6.__file__).parent
 shiboken6_dir = Path(__import__("shiboken6").__file__).parent
 qt_runtime_dlls = [
     (str(pyside6_dir / name), "PySide6")
@@ -32,25 +37,6 @@ shiboken_runtime_dlls = [
     for name in ("shiboken6.abi3.dll",)
     if (shiboken6_dir / name).exists()
 ]
-
-# Qt6Core dynamically loads ICU on Windows.  The Python distribution used to
-# build this application does not ship ICU itself, so include the available
-# ICU runtime DLLs in the bundle when present (for example from the bundled
-# Poppler runtime used by the workspace).
-icu_runtime_dlls = []
-icu_dirs = [
-    Path(os.environ.get("QT_ICU_DIR", "")),
-    Path(shutil.which("icuuc.dll") or "").parent,
-    Path(r"C:\Users\admin\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\poppler\Library\bin"),
-]
-for icu_dir in icu_dirs:
-    if icu_dir.is_dir():
-        icu_runtime_dlls.extend(
-            (str(path), "PySide6")
-            for path in icu_dir.glob("icu*.dll")
-        )
-        if icu_runtime_dlls:
-            break
 
 # 打包图标文件到 exe 内部
 datas = [
@@ -125,7 +111,7 @@ excludes = [
 a = Analysis(
     [str(project_dir / "run.py")],
     pathex=[str(src_dir)],
-    binaries=qt_runtime_dlls + shiboken_runtime_dlls + icu_runtime_dlls,
+    binaries=qt_runtime_dlls + shiboken_runtime_dlls,
     datas=datas,
     hiddenimports=openpyxl_imports + borehole_imports,
     hookspath=[],
@@ -143,7 +129,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="钻孔数据编辑工具v3",
+    name="钻孔数据编辑工具v3.1",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

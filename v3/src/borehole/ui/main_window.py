@@ -76,7 +76,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("钻孔数据编辑工具 v3")
+        self.setWindowTitle("钻孔数据编辑工具 v3.1")
         self.setMinimumSize(980, 640)
         self.resize(1180, 760)
 
@@ -416,6 +416,8 @@ class MainWindow(QMainWindow):
             return
         borehole = self._project.boreholes[prefix]
         if self._current_borehole is borehole:
+            # 当前钻孔可能仍相同，但上一次选择的剖面/附属文件会把页签留在“数据文件”。
+            self._tabs.setCurrentWidget(self._main_file_page)
             return
         self._flush_active_editors()
         self._load_current_borehole(borehole)
