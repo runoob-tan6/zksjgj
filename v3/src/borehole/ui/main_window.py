@@ -13,13 +13,18 @@ from PySide6.QtCore import QPoint, Qt, QThread
 from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QSplitter,
     QStatusBar,
     QTabWidget,
@@ -29,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..application.backup_restore import BackupEntry, list_backups, restore_backups
 from ..application.column_chart_service import synchronize_column_charts
 from ..application.project_file_operations import ProjectFileOperations
 from ..application.project_service import (
@@ -54,6 +60,7 @@ from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData
 from ..domain.validators import validate_project
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
+from ..infrastructure.text_io import read_text_auto
 from ..infrastructure.xlsx_export import export_layer_test_summary
 from .info_pages import EditableTextPage, RawTextPage, ValidationPage
 from .main_file_page import MainFilePage
@@ -107,6 +114,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("选择项目...", self._choose_project, QKeySequence("Ctrl+O"))
         file_menu.addAction("重新加载", self._reload_project, QKeySequence("Ctrl+R"))
         file_menu.addAction("打开文件夹", self._open_project_folder)
+        file_menu.addAction("恢复备份...", self._restore_backup)
         file_menu.addSeparator()
         file_menu.addAction("退出", self.close, QKeySequence("Ctrl+Q"))
 
@@ -254,6 +262,109 @@ class MainWindow(QMainWindow):
             return
         if self._project.folder.exists():
             os.startfile(self._project.folder)
+
+    def _restore_backup(self) -> None:
+        if self._busy:
+            return
+        folder = self._project.folder
+        if not folder:
+            QMessageBox.information(self, "恢复备份", "当前没有加载项目。")
+            return
+        entries = list_backups(folder)
+        if not entries:
+            QMessageBox.information(self, "恢复备份", "当前项目没有可用的备份文件。")
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("恢复备份")
+        dialog.setMinimumSize(680, 460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("请选择要恢复的备份文件（可多选）："))
+        preview_layout = QHBoxLayout()
+        backups = QListWidget()
+        backups.setMinimumWidth(290)
+        backups.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        for entry in entries:
+            item = QListWidgetItem(
+                f"{entry.target_name}    {self._format_backup_time(entry.created_at)}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            backups.addItem(item)
+        preview_layout.addWidget(backups)
+
+        preview = QPlainTextEdit()
+        preview.setReadOnly(True)
+        preview.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        preview_layout.addWidget(preview)
+        layout.addLayout(preview_layout)
+
+        def update_preview() -> None:
+            selected_items = backups.selectedItems()
+            if len(selected_items) != 1:
+                preview.setPlainText("请选择一个备份文件预览内容。")
+                return
+            entry = selected_items[0].data(Qt.ItemDataRole.UserRole)
+            if not isinstance(entry, BackupEntry):
+                return
+            target = folder / entry.target_name
+            backup_text = self._read_preview_text(entry.backup)
+            current_text = self._read_preview_text(target) if target.exists() else "[当前文件不存在]"
+            preview.setPlainText(
+                f"目标文件：{target}\n"
+                f"备份时间：{self._format_backup_time(entry.created_at)}\n\n"
+                "========== 备份内容 ==========\n"
+                f"{backup_text}\n"
+                "========== 当前内容 ==========\n"
+                f"{current_text}"
+            )
+
+        backups.itemSelectionChanged.connect(update_preview)
+        update_preview()
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        selected = [item.data(Qt.ItemDataRole.UserRole) for item in backups.selectedItems()]
+        if not selected:
+            QMessageBox.information(self, "恢复备份", "请至少选择一个备份文件。")
+            return
+        selected_entries = [entry for entry in selected if isinstance(entry, BackupEntry)]
+        if self._check_unsaved_changes() is False:
+            return
+        names = "\n".join(f"  {entry.target_name}" for entry in selected_entries)
+        reply = QMessageBox.question(
+            self,
+            "确认恢复",
+            f"将恢复以下文件：\n{names}\n\n当前文件会先备份到 tmp，是否继续？",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            restored = restore_backups(folder, selected_entries)
+        except Exception as error:
+            logger.exception("Backup restore failed")
+            QMessageBox.critical(self, "恢复失败", f"恢复备份时出错：{error}")
+            return
+        self._load_project_path(folder)
+        self._status_label.setText(f"已恢复 {len(restored)} 个文件，正在重新加载项目。")
+
+    @staticmethod
+    def _format_backup_time(value: str) -> str:
+        return (
+            f"{value[:4]}-{value[4:6]}-{value[6:8]} "
+            f"{value[8:10]}:{value[10:12]}:{value[12:14]}"
+        )
+
+    @staticmethod
+    def _read_preview_text(path: Path) -> str:
+        try:
+            return read_text_auto(path).text
+        except Exception as error:
+            return f"[无法读取：{error}]"
 
     def _check_unsaved_changes(self) -> bool:
         """检查是否有未保存的修改，提示用户。返回 True 表示可以继续。"""
@@ -463,6 +574,10 @@ class MainWindow(QMainWindow):
             parts = prefix.split(":")
             profile_name = parts[1]
             suffix = parts[2]
+            menu.addAction(
+                "复制附属文件",
+                lambda: self._copy_profile_extra(profile_name, suffix),
+            )
             menu.addAction(f"删除 .-{suffix}", lambda: self._delete_profile_extra(profile_name, suffix))
         # 柱状图文件
         elif prefix.startswith("project_file:"):
@@ -662,6 +777,34 @@ class MainWindow(QMainWindow):
         self._current_extra_suffix = None
         self._refresh_borehole_list()
         self._status_label.setText(f"已删除 {profile_name}.-{suffix}。")
+
+    def _copy_profile_extra(self, profile_name: str, suffix: str) -> None:
+        source = self._project.profile_files.get(profile_name)
+        if not source or suffix not in source.extra_files:
+            return
+        target_name, ok = QInputDialog.getText(
+            self,
+            "复制附属文件",
+            f"请输入目标剖面文件名（例如 H2，将复制为 H2.-{suffix}）：",
+        )
+        if not ok or not target_name.strip():
+            return
+        target_name = target_name.strip().upper()
+        target = self._project.profile_files.get(target_name)
+        if not target:
+            QMessageBox.warning(self, "提示", f"剖面文件 {target_name} 不存在。")
+            return
+        if target_name == profile_name:
+            QMessageBox.warning(self, "提示", "目标剖面文件不能与源文件相同。")
+            return
+        if suffix in target.extra_files:
+            QMessageBox.warning(self, "提示", f"{target_name}.-{suffix} 已存在，未覆盖。")
+            return
+        target.extra_files[suffix] = source.extra_files[suffix]
+        target.modified = True
+        self._refresh_borehole_list()
+        self._select_in_tree(f"profile_extra:{target_name}:{suffix}")
+        self._status_label.setText(f"已复制 {profile_name}.-{suffix} → {target_name}.-{suffix}。")
 
     def _add_project_file(self) -> None:
         if not self._project.folder:

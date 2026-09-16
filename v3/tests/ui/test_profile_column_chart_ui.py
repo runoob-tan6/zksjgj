@@ -164,6 +164,25 @@ def test_profile_context_menu_includes_rename_command(qtbot, monkeypatch, tmp_pa
     window.close()
 
 
+def test_copy_profile_extra_file_to_another_profile(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    window._project.profile_files = {
+        "H1": ProfileFile(name="H1", path=tmp_path / "H1", extra_files={"k": "profile-k"}),
+        "H2": ProfileFile(name="H2", path=tmp_path / "H2"),
+    }
+    window._refresh_borehole_list()
+    window._select_in_tree("profile_extra:H1:k")
+    monkeypatch.setattr(QInputDialog, "getText", lambda *_args, **_kwargs: ("H2", True))
+
+    window._copy_profile_extra("H1", "k")
+
+    assert window._project.profile_files["H2"].extra_files["k"] == "profile-k"
+    assert window._project.profile_files["H2"].modified is True
+    assert window._tree_controller.current_key() == "profile_extra:H2:k"
+    window._project = create_empty_project()
+    window.close()
+
+
 def test_profile_rename_updates_model_selection_and_keeps_first_old_name(qtbot, monkeypatch, tmp_path: Path) -> None:
     window = _window(qtbot, monkeypatch, tmp_path)
     window._project = _project_with_profile(tmp_path)
