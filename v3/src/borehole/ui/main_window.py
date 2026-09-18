@@ -888,13 +888,15 @@ class MainWindow(QMainWindow):
         self._select_in_tree(f"extra:{bh_prefix}:{suffix}")
         self._status_label.setText(f"已新增 {bh_prefix}.-{suffix}。")
 
-    def _load_current_borehole(self, borehole: Borehole | None) -> None:
+    def _load_current_borehole(self, borehole: Borehole | None, *, preserve_editors: bool = False) -> None:
+        preserve_editors = preserve_editors and self._current_borehole is borehole
         self._current_borehole = borehole
         self._current_extra_borehole = None
         self._current_extra_profile = None
         self._current_extra_suffix = None
-        self._main_file_page.load_borehole(borehole)
-        self._test_data_page.load_borehole(borehole)
+        if not preserve_editors:
+            self._main_file_page.load_borehole(borehole)
+            self._test_data_page.load_borehole(borehole)
         self._spt_analysis_page.load_project(self._project)
         self._raw_text_page.load_borehole(borehole)
         self._validation_page.load_borehole(borehole)
@@ -1188,8 +1190,9 @@ class MainWindow(QMainWindow):
             self._current_extra_suffix = saved_extra_suffix
         elif saved_borehole:
             self._select_in_tree(saved_borehole.prefix)
-            # 确保钻孔数据被正确加载（_select_in_tree 可能因 item 已选中而不触发 currentItemChanged）
-            self._load_current_borehole(saved_borehole)
+            # Saving does not replace the in-memory records. Keep the editors
+            # alive so focus and scroll never jump behind the completion dialog.
+            self._load_current_borehole(saved_borehole, preserve_editors=True)
         self._update_summary()
         self._update_undo_controls()
         total = len(generated) + profile_count

@@ -125,6 +125,8 @@ class TestRecord:
     """试验记录。"""
 
     values: list[str] = field(default_factory=list)
+    # Runtime-only pairing; legacy test files continue to store values alone.
+    sample_pair_id: str = field(default="", repr=False, compare=False)
 
 
 @dataclass

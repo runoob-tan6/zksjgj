@@ -24,7 +24,10 @@ def copy_layers(layers: list[BasicLayer]) -> list[BasicLayer]:
 
 def copy_tests(tests: dict[str, list[TestRecord]]) -> dict[str, list[TestRecord]]:
     return {
-        suffix: [TestRecord(values=list(record.values)) for record in records]
+        suffix: [
+            TestRecord(values=list(record.values), sample_pair_id=record.sample_pair_id)
+            for record in records
+        ]
         for suffix, records in tests.items()
     }
 
