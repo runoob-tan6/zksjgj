@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QItemSelectionModel, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 import borehole.ui.main_window as main_window_module
@@ -73,6 +73,15 @@ def test_empty_row_fills_end_without_rounding_depth(qtbot, suffix, end) -> None:
     model.add_record()
     assert model.setData(model.index(0, 0), "1.125")
     assert model.records[0].values[:2] == ["1.125", end]
+
+
+def test_pressure_test_end_depth_does_not_exceed_borehole_depth(qtbot) -> None:
+    model = RecordModel("m")
+    model.borehole_depth = 21.0
+    model.add_record()
+
+    assert model.setData(model.index(0, 0), "16.2")
+    assert model.records[0].values[:2] == ["16.2", "21.0"]
 
 
 def test_new_sample_generates_precise_spt_depths_with_empty_count(qtbot) -> None:
@@ -191,6 +200,48 @@ def test_standalone_section_renumbers_without_nested_undo(qtbot) -> None:
     assert [record.values[2] for record in hole.tests["o"]] == [f"ZK1-{i}" for i in range(1, 6)]
 
 
+def test_extended_selection_deletes_selected_rows_as_one_change(qtbot) -> None:
+    hole = _hole()
+    changes = []
+    section = Section("q", lambda *_: "token", changes.append)
+    qtbot.addWidget(section)
+    section.load_borehole(hole)
+
+    selection = section._table.selectionModel()
+    flags = QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+    selection.select(section._model.index(0, 0), flags)
+    selection.select(section._model.index(2, 0), flags)
+
+    assert section._table.selectionMode() == section._table.SelectionMode.ExtendedSelection
+    assert section._selected_rows() == [0, 2]
+    section._delete()
+
+    assert [record.values[0] for record in hole.tests["q"]] == ["4.55", "8.55"]
+    assert changes == ["token"]
+
+
+def test_batch_sample_delete_removes_selected_spts_after_all_confirmations(qtbot, monkeypatch) -> None:
+    hole = _hole()
+    page = _page(qtbot, hole)
+    prompts = []
+    monkeypatch.setattr(
+        page,
+        "_confirm_sample_deletion",
+        lambda sample, spt: prompts.append((sample, spt)) or QMessageBox.StandardButton.No,
+    )
+    sample = page._sections["o"]
+    selection = sample._table.selectionModel()
+    flags = QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+    selection.select(sample._model.index(0, 0), flags)
+    selection.select(sample._model.index(2, 0), flags)
+
+    sample._delete()
+
+    assert len(prompts) == 2
+    assert [record.values[2] for record in hole.tests["o"]] == ["ZK1-1", "ZK1-2"]
+    assert [record.values[0] for record in hole.tests["q"]] == ["4.55", "8.55"]
+
+
 def test_pairing_undo_redo_and_save_reload(qtbot, monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(main_window_module, "load_last_project", lambda: None)
     window = MainWindow()
@@ -239,6 +290,44 @@ def test_pairing_undo_redo_and_save_reload(qtbot, monkeypatch, tmp_path) -> None
     sample.setData(sample.index(3, 0), "6.1")
     assert len(reloaded.tests["q"]) == 4
     assert reloaded.tests["q"][2].values == ["6.65", "6.95", "9"]
+
+
+def test_undo_redo_preserves_test_table_focus(qtbot, monkeypatch) -> None:
+    monkeypatch.setattr(main_window_module, "load_last_project", lambda: None)
+    window = MainWindow()
+    qtbot.addWidget(window, before_close_func=lambda widget: setattr(widget, "_project", create_empty_project()))
+    hole = _hole()
+    window._project.boreholes[hole.prefix] = hole
+    window._refresh_borehole_list()
+    window._load_current_borehole(hole)
+    window._select_in_tree(hole.prefix)
+    window._tabs.setCurrentWidget(window._test_data_page)
+    window.show()
+    window.activateWindow()
+
+    table = window._test_data_page._sections["q"]._table
+    table.setCurrentIndex(table.model().index(1, 1))
+    table.setFocus()
+    qtbot.wait(50)
+    assert QApplication.focusWidget() is table
+
+    assert table.model().setData(table.model().index(1, 0), "4.75")
+    window._undo()
+    qtbot.wait(50)
+
+    restored_table = window._test_data_page._sections["q"]._table
+    assert window._tabs.currentWidget() is window._test_data_page
+    assert QApplication.focusWidget() is restored_table
+    assert restored_table.currentIndex().row() == 1
+    assert restored_table.currentIndex().column() == 1
+
+    window._redo()
+    qtbot.wait(50)
+
+    restored_table = window._test_data_page._sections["q"]._table
+    assert QApplication.focusWidget() is restored_table
+    assert restored_table.currentIndex().row() == 1
+    assert restored_table.currentIndex().column() == 1
 
 
 def test_custom_pair_link_survives_snapshot_restore(qtbot, monkeypatch) -> None:

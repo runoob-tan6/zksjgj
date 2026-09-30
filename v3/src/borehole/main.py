@@ -83,6 +83,18 @@ def main() -> None:
             padding: 4px;
             border: none;
         }
+        QTableView#testDataTable {
+            selection-background-color: #93C5FD;
+            selection-color: #172554;
+        }
+        QTableView#testDataTable::item:selected {
+            background: #93C5FD;
+            color: #172554;
+        }
+        QTableView#testDataTable::item:selected:!active {
+            background: #93C5FD;
+            color: #172554;
+        }
         QTreeView::item:selected {
             background: #D6DEFF;
             border-left: 3px solid #6C63FF;

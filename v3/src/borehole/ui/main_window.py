@@ -1116,6 +1116,12 @@ class MainWindow(QMainWindow):
     def _apply_snapshot(
         self, borehole: Borehole, snapshot: BoreholeSnapshot, *, activate: bool = True
     ) -> None:
+        preserve_test_view = (
+            activate
+            and self._current_borehole is borehole
+            and self._tabs.currentWidget() is self._test_data_page
+        )
+        test_view_state = self._test_data_page.capture_view_state() if preserve_test_view else None
         old_key = borehole.prefix
         if old_key in self._project.boreholes and self._project.boreholes[old_key] is borehole:
             del self._project.boreholes[old_key]
@@ -1129,6 +1135,9 @@ class MainWindow(QMainWindow):
         self._refresh_borehole_list()
         self._load_current_borehole(borehole)
         self._select_in_tree(borehole.prefix)
+        if test_view_state is not None:
+            self._tabs.setCurrentWidget(self._test_data_page)
+            self._test_data_page.restore_view_state(test_view_state)
 
     def _update_undo_controls(self) -> None:
         manager = self._get_undo_manager(self._current_borehole)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from ..domain.models import END_MARK, MAIN_INDEX_CASING_DEPTH, MAIN_INDEX_DEPTH, Borehole
 
@@ -46,6 +47,21 @@ def build_test_file_lines(borehole: Borehole, suffix: str) -> list[str]:
     for record in borehole.tests.get(suffix, []):
         raw_values = record.values[:value_limit] if value_limit else record.values
         values = [str(value or "").strip() for value in raw_values]
+        if suffix in {"e", "f"} and values and values[0]:
+            try:
+                depth = Decimal(values[0])
+                if depth.is_finite():
+                    values[0] = format(depth.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP), "f")
+            except InvalidOperation:
+                pass
+        if suffix in {"e", "f"} and len(values) > 1 and values[1]:
+            try:
+                values[1] = format(
+                    Decimal(values[1]).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                    "f",
+                )
+            except (InvalidOperation, ValueError):
+                pass
         while values and not values[-1]:
             values.pop()
         if any(values):
