@@ -62,6 +62,7 @@ from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
 from ..infrastructure.text_io import read_text_auto
 from ..infrastructure.xlsx_export import export_layer_test_summary
+from .apparent_dip_dialog import ApparentDipDialog
 from .info_pages import EditableTextPage, RawTextPage, ValidationPage
 from .main_file_page import MainFilePage
 from .project_tree_controller import ProjectTreeController
@@ -134,8 +135,13 @@ class MainWindow(QMainWindow):
         tool_menu.addAction("新增剖面文件", self._add_profile)
         tool_menu.addAction("校验项目", self._validate_project)
         tool_menu.addAction("导出试验汇总...", self._export_layer_tests)
+        tool_menu.addAction("视倾角计算...", self._open_apparent_dip_dialog)
         tool_menu.addSeparator()
         tool_menu.addAction("保存数据", self._save_data, QKeySequence("Ctrl+S"))
+
+    def _open_apparent_dip_dialog(self) -> None:
+        if not self._busy:
+            ApparentDipDialog(self).exec()
 
     def _build_ui(self) -> None:
         central = QWidget()
