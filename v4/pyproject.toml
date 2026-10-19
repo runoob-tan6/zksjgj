@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "borehole-editor-v4"
+version = "4.0.0"
+description = "钻孔数据编辑工具 v4 - 在 v3 基础上优化试验数据页布局"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    # PySide6 6.10+ QtCore requires an external ICU runtime on Windows.
+    # 6.9.x is self-contained and avoids machine-dependent ICU DLL loading.
+    "PySide6>=6.9.0,<6.10.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-qt>=4.2.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+    "pyinstaller>=6.0.0",
+]
+
+[project.scripts]
+borehole-v4 = "borehole.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = ["-ra", "-q", "--strict-markers", "--tb=short"]
+markers = [
+    "slow: marks tests as slow",
+    "ui: marks tests that require UI",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/borehole/ui/*.py" = ["N802"]
