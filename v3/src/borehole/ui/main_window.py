@@ -94,6 +94,7 @@ class MainWindow(QMainWindow):
         self._busy = False
         self._refreshing_list = False
         self._syncing = False
+        self._apparent_dip_dialog: ApparentDipDialog | None = None
         self._task_runner = TaskRunner(self)
         self._task_runner.finished.connect(self._on_task_finished)
         self._worker: QThread | None = None
@@ -140,8 +141,14 @@ class MainWindow(QMainWindow):
         tool_menu.addAction("保存数据", self._save_data, QKeySequence("Ctrl+S"))
 
     def _open_apparent_dip_dialog(self) -> None:
-        if not self._busy:
-            ApparentDipDialog(self).exec()
+        if self._busy:
+            return
+        if self._apparent_dip_dialog is None:
+            self._apparent_dip_dialog = ApparentDipDialog(self)
+            self._apparent_dip_dialog.setModal(False)
+        self._apparent_dip_dialog.show()
+        self._apparent_dip_dialog.raise_()
+        self._apparent_dip_dialog.activateWindow()
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -572,6 +579,7 @@ class MainWindow(QMainWindow):
         elif prefix.startswith("profile:") and not prefix.startswith("profile_extra:"):
             name = prefix[8:]
             menu.addAction("复制剖面文件", lambda: self._copy_profile(name))
+            menu.addAction("复制剖面路径", lambda: self._copy_profile_path(name))
             menu.addAction("重命名剖面文件", lambda: self._rename_profile(name))
             menu.addSeparator()
             menu.addAction("删除剖面文件", lambda: self._delete_profile(name))
@@ -692,6 +700,14 @@ class MainWindow(QMainWindow):
         self._refresh_borehole_list()
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已复制剖面文件 {name} → {new_name}。")
+
+    def _copy_profile_path(self, name: str) -> None:
+        profile = self._project.profile_files.get(name)
+        if not profile:
+            return
+        path = profile.path
+        QApplication.clipboard().setText(str(path.resolve()))
+        self._status_label.setText(f"已复制剖面路径：{path.resolve()}")
 
     def _rename_profile(self, name: str) -> None:
         profile = self._project.profile_files.get(name)

@@ -236,21 +236,34 @@ def test_repeated_enter_in_section_field_commits_and_calculates_once_per_press(d
     assert "方位173°" in dialog._report
 
 
-def test_tools_menu_opens_calculator_without_loaded_project(qtbot, monkeypatch) -> None:
+def test_tools_menu_opens_modeless_calculator_without_loaded_project(qtbot, monkeypatch) -> None:
     monkeypatch.setattr(main_window_module, "load_last_project", lambda: None)
     window = MainWindow()
     qtbot.addWidget(window)
-    opened = []
-
-    def execute(self):
-        opened.append(self)
-        return 0
-
-    monkeypatch.setattr(ApparentDipDialog, "exec", execute)
     menu_actions = window.menuBar().actions()
     tools = menu_actions[2].menu()
     action = next(action for action in tools.actions() if action.text() == "视倾角计算...")
     action.trigger()
-    assert len(opened) == 1
+    dialog = window._apparent_dip_dialog
+    assert isinstance(dialog, ApparentDipDialog)
+    assert dialog.isVisible()
+    assert not dialog.isModal()
+    assert dialog.windowModality() == Qt.WindowModality.NonModal
     assert not window._project.dirty_boreholes()
     assert not window._project.profile_files
+    window._project.folder = None
+    window.close()
+
+
+def test_reopening_calculator_reuses_modeless_window(qtbot, monkeypatch) -> None:
+    monkeypatch.setattr(main_window_module, "load_last_project", lambda: None)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window._open_apparent_dip_dialog()
+    dialog = window._apparent_dip_dialog
+    window._open_apparent_dip_dialog()
+    assert window._apparent_dip_dialog is dialog
+    assert dialog.isVisible()
+    assert not dialog.isModal()
+    window._project.folder = None
+    window.close()
