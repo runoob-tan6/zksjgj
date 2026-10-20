@@ -1205,25 +1205,13 @@ class MainWindow(QMainWindow):
         generated, profile_count = result
         self._set_busy(False)
         self._undo_controller.clear()
-        # 保存前记录当前编辑状态（_refresh_borehole_list 内部的 _on_borehole_selected 会清除这些状态）
-        saved_extra_profile = self._current_extra_profile
-        saved_extra_suffix = self._current_extra_suffix
-        saved_borehole = self._current_borehole
+        # The tree refresh already restores its current key without navigating.
+        # Cached text-file targets may belong to a previously visited page.
         self._refresh_borehole_list()
-        # 保存后恢复到之前编辑的位置（剖面文件、柱状图文件或钻孔）
-        if saved_extra_profile:
-            if saved_extra_suffix:
-                self._select_in_tree(f"profile_extra:{saved_extra_profile.name}:{saved_extra_suffix}")
-            else:
-                self._select_in_tree(f"profile:{saved_extra_profile.name}")
-            # 恢复状态（_refresh_borehole_list 内部的 _on_borehole_selected 已清除）
-            self._current_extra_profile = saved_extra_profile
-            self._current_extra_suffix = saved_extra_suffix
-        elif saved_borehole:
-            self._select_in_tree(saved_borehole.prefix)
-            # Saving does not replace the in-memory records. Keep the editors
-            # alive so focus and scroll never jump behind the completion dialog.
-            self._load_current_borehole(saved_borehole, preserve_editors=True)
+        # Keep editable pages and their callbacks alive; only refresh derived views.
+        self._spt_analysis_page.load_project(self._project)
+        self._raw_text_page.load_borehole(self._current_borehole)
+        self._validation_page.load_borehole(self._current_borehole)
         self._update_summary()
         self._update_undo_controls()
         total = len(generated) + profile_count

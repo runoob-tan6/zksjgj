@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
@@ -19,6 +21,12 @@ class ProjectTreeController:
         current_key = self.current_key()
         if current_key is None and current_borehole is not None:
             current_key = current_borehole.prefix
+        expanded = {
+            item.data(0, Qt.ItemDataRole.UserRole) or item.text(0): item.isExpanded()
+            for item in self._items()
+        }
+        scroll_position = self.tree.verticalScrollBar().value()
+        horizontal_position = self.tree.horizontalScrollBar().value()
         self.tree.clear()
         bold_font = self.tree.font()
         bold_font.setBold(True)
@@ -48,6 +56,22 @@ class ProjectTreeController:
 
         if current_key is not None:
             self.select(current_key)
+        # scrollToItem can expand a selected child's parents, so restore these last.
+        for item in self._items():
+            key = item.data(0, Qt.ItemDataRole.UserRole) or item.text(0)
+            if key in expanded:
+                item.setExpanded(expanded[key])
+        self.tree.verticalScrollBar().setValue(scroll_position)
+        self.tree.horizontalScrollBar().setValue(horizontal_position)
+
+    def _items(self) -> Iterator[QTreeWidgetItem]:
+        pending = [self.tree.topLevelItem(index) for index in reversed(range(self.tree.topLevelItemCount()))]
+        while pending:
+            item = pending.pop()
+            if item is None:
+                continue
+            yield item
+            pending.extend(item.child(index) for index in reversed(range(item.childCount())))
 
     def current_key(self) -> str | None:
         item = self.tree.currentItem()
