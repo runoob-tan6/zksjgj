@@ -5,6 +5,7 @@ def test_release_files_use_v4_identity() -> None:
     spec = Path("borehole_v4.spec").read_text(encoding="utf-8")
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
     build_script = Path("打包exe.bat").read_text(encoding="utf-8")
+    build_script_ps1 = Path("打包exe.ps1").read_text(encoding="utf-8")
 
     assert 'name="钻孔数据编辑工具v4.0"' in spec
     assert 'name = "borehole-editor-v4"' in pyproject
@@ -12,5 +13,8 @@ def test_release_files_use_v4_identity() -> None:
     assert 'requires-python = ">=3.10,<3.14"' in pyproject
     assert 'PySide6>=6.9.0,<6.10.0' in pyproject
     assert "PySide6 6.9.x is required" in spec
-    assert "borehole_v4.spec" in build_script
+    # 打包入口：bat 转发到 ps1，ps1 再调用 v4 的 spec。
+    assert "%~dpn0.ps1" in build_script
+    assert "borehole_v4.spec" in build_script_ps1
+    assert "钻孔数据编辑工具v4.0.exe" in build_script_ps1
     assert Path("assets/app_icon.ico").is_file()
