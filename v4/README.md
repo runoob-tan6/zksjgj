@@ -62,10 +62,18 @@ python -m mypy src tools
 双击 `打包exe.bat`，或执行：
 
 ```powershell
-python -m PyInstaller --clean --noconfirm borehole_v4.spec
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\打包exe.ps1
+```
+
+打包脚本通过 `uv` 使用项目虚拟环境和 `dev` 依赖，不依赖当前终端的全局 Python。需要安装 `uv` 和 PowerShell 7。
+也可在 PowerShell 中直接执行：
+
+```powershell
+uv run --extra dev python -m PyInstaller --clean --noconfirm borehole_v4.spec
 ```
 
 打包配置会检查 PySide6 版本；如果版本不是 6.9.x，会在构建开始时直接报错，避免生成启动失败的 EXE。
+脚本会在打包失败时返回非零退出码，并确认目标 EXE 已生成。
 
 输出文件为 `dist/钻孔数据编辑工具v4.0.exe`。
 

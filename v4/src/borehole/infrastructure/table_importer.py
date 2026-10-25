@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -39,11 +39,24 @@ def _fmt(value: Any) -> str:
     return str(value).strip()
 
 
-def _parse_date(value: str) -> date:
-    parts = re.split(r"[.\-/]", value.strip())
+def _parse_date(value: Any) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = _fmt(value)
+    parts = re.split(r"[.\-/]", text)
     if len(parts) != 3:
         raise ValueError(f"日期格式错误：{value!r}，应为 YYYY.M.D")
-    return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    try:
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError as error:
+        raise ValueError(f"日期格式错误：{value!r}，应为 YYYY.M.D") from error
+
+
+def _date_text(value: Any, fallback: date) -> str:
+    work_date = _parse_date(value) if value not in (None, "") else fallback
+    return f"{work_date.year}.{work_date.month}.{work_date.day}"
 
 
 def _make_text(lines: list[str]) -> str:
@@ -138,6 +151,14 @@ def _discover_layer_headers(ws: Any) -> list[dict[str, Any]]:
     return headers
 
 
+def _find_column(ws: Any, label: str) -> int | None:
+    for row in range(1, min(ws.max_row, 5) + 1):
+        for col in range(1, ws.max_column + 1):
+            if _fmt(ws.cell(row, col).value) == label:
+                return col
+    return None
+
+
 def _read_layers(ws: Any, row: int, headers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     layers: list[dict] = []
     for header in headers:
@@ -194,6 +215,7 @@ def import_from_table(
             raise ValueError("未找到岩性层数据列。")
         proj_name = project_name or _fmt(ws.cell(1, 1).value) or DEFAULT_PROJECT
         first_date = _parse_date(start_date)
+        time_col = _find_column(ws, TIME)
 
         project_folder.mkdir(parents=True, exist_ok=True)
         imported = 0
@@ -213,8 +235,11 @@ def import_from_table(
                 continue
 
             depth = layers[-1]["depth"]
-            work_date = first_date + timedelta(days=(hole_number - 1) // holes_per_day)
-            work_date_text = f"{work_date.year}.{work_date.month}.{work_date.day}"
+            fallback_date = first_date + timedelta(days=(hole_number - 1) // holes_per_day)
+            work_date_text = _date_text(
+                ws.cell(row, time_col).value if time_col else None,
+                fallback_date,
+            )
 
             files = {
                 hole_id: _render_main_file(
@@ -292,6 +317,15 @@ def _import_csv_rows(
 
     proj_name = project_name or (rows[0][0].strip() if rows[0] else "") or DEFAULT_PROJECT
     first_date = _parse_date(start_date)
+    time_col = next(
+        (
+            col
+            for header_row in rows[:5]
+            for col, value in enumerate(header_row)
+            if _fmt(value) == TIME
+        ),
+        None,
+    )
     project_folder.mkdir(parents=True, exist_ok=True)
     imported = 0
 
@@ -337,8 +371,11 @@ def _import_csv_rows(
             continue
 
         depth = layers[-1]["depth"]
-        work_date = first_date + timedelta(days=(hole_number - 1) // holes_per_day)
-        work_date_text = f"{work_date.year}.{work_date.month}.{work_date.day}"
+        fallback_date = first_date + timedelta(days=(hole_number - 1) // holes_per_day)
+        work_date_text = _date_text(
+            row[time_col] if time_col is not None and time_col < len(row) else None,
+            fallback_date,
+        )
 
         files = {
             hole_id: _render_main_file(
