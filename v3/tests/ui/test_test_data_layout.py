@@ -372,6 +372,18 @@ def test_ef_percentage_editor_accepts_only_integers(qtbot) -> None:
     assert editor.validator().validate("101", 0)[0] != QValidator.State.Acceptable
 
 
+def test_cleared_ef_editor_is_ignored_when_committing(qtbot) -> None:
+    section = Section("e")
+    qtbot.addWidget(section)
+    section._model.load([Record(["2", "1"])])
+    editor = section._delegate.createEditor(
+        section._table.viewport(), QStyleOptionViewItem(), section._model.index(0, 2),
+    )
+    section._delegate._clear_editor(editor)
+    assert section._delegate._active_editor is None
+    section.commit_active_edit()
+
+
 def test_ef_percentage_edit_is_undoable_and_survives_save(qtbot, tmp_path) -> None:
     borehole = Borehole(
         prefix="ZK1",

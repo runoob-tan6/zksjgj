@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from ..domain.enums import SUFFIX_NAMES
 from ..domain.models import MAIN_INDEX_END_DATE, Borehole, TestRecord
@@ -181,7 +182,12 @@ class _TrackingDelegate(QStyledItemDelegate):
         ):
             editor.setValidator(QIntValidator(0, 100, editor))
         self._active_editor = editor
+        editor.destroyed.connect(lambda _object=None, editor=editor: self._clear_editor(editor))
         return editor
+
+    def _clear_editor(self, editor: QWidget) -> None:
+        if self._active_editor is editor:
+            self._active_editor = None
 
     def setModelData(
         self, editor: QWidget, model: QAbstractItemModel, index: QModelIndex | QPersistentModelIndex
@@ -192,12 +198,12 @@ class _TrackingDelegate(QStyledItemDelegate):
 
     def commit_active_edit(self, view: QTableView) -> None:
         editor = self._active_editor
-        if editor:
+        if editor and isValid(editor):
             model = view.model()
             if model is not None:
                 self.setModelData(editor, model, view.currentIndex())
             view.closePersistentEditor(view.currentIndex())
-            self._active_editor = None
+        self._active_editor = None
 
 
 class TestRecordModel(QAbstractTableModel):
