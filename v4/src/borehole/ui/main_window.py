@@ -56,7 +56,15 @@ from ..application.undo_manager import (
     UndoManager,
 )
 from ..domain.enums import HoleType
-from ..domain.models import BasicLayer, Borehole, ProfileFile, ProjectData
+from ..domain.models import (
+    MAIN_FIELD_NAMES,
+    MAIN_INDEX_DESIGN_UNIT,
+    MAIN_INDEX_PROJECT,
+    BasicLayer,
+    Borehole,
+    ProfileFile,
+    ProjectData,
+)
 from ..domain.validators import validate_project
 from ..infrastructure.settings import load_last_project, save_last_project
 from ..infrastructure.table_importer import import_from_table
@@ -94,6 +102,7 @@ class MainWindow(QMainWindow):
         self._busy = False
         self._refreshing_list = False
         self._syncing = False
+        self._apparent_dip_dialog: ApparentDipDialog | None = None
         self._task_runner = TaskRunner(self)
         self._task_runner.finished.connect(self._on_task_finished)
         self._worker: QThread | None = None
@@ -140,8 +149,14 @@ class MainWindow(QMainWindow):
         tool_menu.addAction("保存数据", self._save_data, QKeySequence("Ctrl+S"))
 
     def _open_apparent_dip_dialog(self) -> None:
-        if not self._busy:
-            ApparentDipDialog(self).exec()
+        if self._busy:
+            return
+        if self._apparent_dip_dialog is None:
+            self._apparent_dip_dialog = ApparentDipDialog(self)
+            self._apparent_dip_dialog.setModal(False)
+        self._apparent_dip_dialog.show()
+        self._apparent_dip_dialog.raise_()
+        self._apparent_dip_dialog.activateWindow()
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -572,6 +587,7 @@ class MainWindow(QMainWindow):
         elif prefix.startswith("profile:") and not prefix.startswith("profile_extra:"):
             name = prefix[8:]
             menu.addAction("复制剖面文件", lambda: self._copy_profile(name))
+            menu.addAction("复制剖面路径", lambda: self._copy_profile_path(name))
             menu.addAction("重命名剖面文件", lambda: self._rename_profile(name))
             menu.addSeparator()
             menu.addAction("删除剖面文件", lambda: self._delete_profile(name))
@@ -692,6 +708,14 @@ class MainWindow(QMainWindow):
         self._refresh_borehole_list()
         self._select_in_tree(f"profile:{new_name}")
         self._status_label.setText(f"已复制剖面文件 {name} → {new_name}。")
+
+    def _copy_profile_path(self, name: str) -> None:
+        profile = self._project.profile_files.get(name)
+        if not profile:
+            return
+        path = profile.path
+        QApplication.clipboard().setText(str(path.resolve()))
+        self._status_label.setText(f"已复制剖面路径：{path.resolve()}")
 
     def _rename_profile(self, name: str) -> None:
         profile = self._project.profile_files.get(name)
@@ -944,8 +968,10 @@ class MainWindow(QMainWindow):
 
     # ── Dirty 标记 ──────────────────────────────────────────────────
 
-    def _on_field_changed(self, _index: int, _old: str, _new: str) -> None:
+    def _on_field_changed(self, index: int, old: str, new: str) -> None:
         self._mark_dirty("main")
+        if index in (MAIN_INDEX_PROJECT, MAIN_INDEX_DESIGN_UNIT):
+            self._sync_shared_main_field(index, old, new)
 
     def _on_hole_id_changed(self, old_prefix: str, new_prefix: str) -> None:
         if old_prefix == new_prefix:
@@ -986,6 +1012,89 @@ class MainWindow(QMainWindow):
             prefix = self._current_borehole.prefix
             self._tree_controller.update_borehole_label(prefix, self._current_borehole.display_name())
             self._status_label.setText(f"{prefix} 已修改。")
+
+    def _sync_shared_main_field(self, index: int, old: str, new: str) -> None:
+        """Optionally propagate project-level main-file fields to other boreholes."""
+        if self._syncing or not self._current_borehole:
+            return
+
+        source = self._current_borehole
+        targets = [
+            borehole
+            for borehole in self._project.boreholes.values()
+            if borehole is not source and borehole.main.normalized_lines()[index] != new
+        ]
+        if not targets:
+            return
+
+        field_name = MAIN_FIELD_NAMES[index]
+        reply = QMessageBox.question(
+            self,
+            "同步项目字段",
+            f"当前已修改“{field_name}”。\n\n是否同步到其他 {len(targets)} 个钻孔？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self._syncing = True
+        try:
+            source_manager = self._get_undo_manager(source)
+            source_action: UndoAction | None = None
+            if source_manager.undo_stack:
+                latest = source_manager.undo_stack[-1]
+                if (
+                    isinstance(latest, UndoAction)
+                    and latest.borehole is source
+                    and latest.after.main_lines[index] == new
+                    and latest.before.main_lines[index] == old
+                ):
+                    source_action = latest
+
+            if source_action is None:
+                before = BoreholeSnapshot.capture(source)
+                before.main_lines[index] = old
+                source_action = UndoAction(
+                    borehole=source,
+                    label=f"修改主文件：{field_name}",
+                    before=before,
+                    after=BoreholeSnapshot.capture(source),
+                )
+
+            actions = [source_action]
+            for borehole in targets:
+                before = BoreholeSnapshot.capture(borehole)
+                lines = borehole.main.normalized_lines()
+                lines[index] = new
+                borehole.main.lines = lines
+                borehole.mark_dirty("main")
+                after = BoreholeSnapshot.capture(borehole)
+                actions.append(
+                    UndoAction(
+                        borehole=borehole,
+                        label=f"同步{field_name}",
+                        before=before,
+                        after=after,
+                    )
+                )
+                self._tree_controller.update_borehole_label(
+                    borehole.prefix, borehole.display_name()
+                )
+
+            composite = CompositeUndoAction(
+                actions=actions,
+                label=f"同步{field_name}",
+            )
+            if source_manager.undo_stack and source_manager.undo_stack[-1] is source_action:
+                source_manager.undo_stack[-1] = composite
+            else:
+                source_manager.push_composite(composite)
+            self._update_summary()
+            self._update_undo_controls()
+            self._status_label.setText(f"已同步{field_name}到 {len(targets)} 个钻孔。")
+        finally:
+            self._syncing = False
 
     def _sync_description(
         self,

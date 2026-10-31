@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QInputDialog, QMenu, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog, QMenu, QMessageBox
 
 import borehole.ui.main_window as main_window_module
 from borehole.application.column_chart_service import synchronize_column_charts
@@ -139,6 +139,29 @@ def test_selecting_current_borehole_after_profile_returns_to_basic_info(
     window.close()
 
 
+def test_tree_refresh_preserves_profile_group_expansion(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    window._project = _project_with_profile(tmp_path)
+    window._refresh_borehole_list()
+    profile_group = next(
+        window._tree.topLevelItem(index)
+        for index in range(window._tree.topLevelItemCount())
+        if window._tree.topLevelItem(index).text(0) == "剖面图"
+    )
+    profile_group.setExpanded(False)
+
+    window._refresh_borehole_list()
+
+    refreshed_group = next(
+        window._tree.topLevelItem(index)
+        for index in range(window._tree.topLevelItemCount())
+        if window._tree.topLevelItem(index).text(0) == "剖面图"
+    )
+    assert not refreshed_group.isExpanded()
+    window._project = create_empty_project()
+    window.close()
+
+
 def test_profile_context_menu_includes_rename_command(qtbot, monkeypatch, tmp_path: Path) -> None:
     window = _window(qtbot, monkeypatch, tmp_path)
     window._project = _project_with_profile(tmp_path)
@@ -159,7 +182,26 @@ def test_profile_context_menu_includes_rename_command(qtbot, monkeypatch, tmp_pa
 
     window._show_context_menu(position)
 
-    assert captured == ["复制剖面文件", "重命名剖面文件", "<separator>", "删除剖面文件"]
+    assert captured == [
+        "复制剖面文件",
+        "复制剖面路径",
+        "重命名剖面文件",
+        "<separator>",
+        "删除剖面文件",
+    ]
+    window._project = create_empty_project()
+    window.close()
+
+
+def test_copy_profile_path_copies_absolute_main_file_path(qtbot, monkeypatch, tmp_path: Path) -> None:
+    window = _window(qtbot, monkeypatch, tmp_path)
+    profile = ProfileFile(name="H8", path=tmp_path / "H8")
+    window._project.profile_files = {"H8": profile}
+
+    window._copy_profile_path("H8")
+
+    assert QApplication.clipboard().text() == str((tmp_path / "H8").resolve())
+    assert str((tmp_path / "H8").resolve()) in window._status_label.text()
     window._project = create_empty_project()
     window.close()
 
